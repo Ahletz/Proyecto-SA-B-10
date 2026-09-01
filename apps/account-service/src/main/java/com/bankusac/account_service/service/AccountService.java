@@ -1,11 +1,13 @@
 package com.bankusac.account_service.service;
 
 import com.bankusac.account_service.model.Account;
+import com.bankusac.account_service.model.AccountStatus;
 import com.bankusac.account_service.model.AccountType;
 import com.bankusac.account_service.repository.AccountRepository;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.UUID;
 
 // aqui va la logica de negocio de las cuentas
@@ -14,6 +16,12 @@ import java.util.UUID;
 public class AccountService {
 
     private final AccountRepository accountRepository;
+
+    // limite de saldo para considerar una cuenta candidata a desactivarse
+    private static final BigDecimal LIMITE_BALANCE_INACTIVA = new BigDecimal("50.00");
+
+    // meses sin actividad para poder desactivar la cuenta
+    private static final int MESES_INACTIVIDAD = 6;
 
     // spring nos da el repository automaticamente aqui, no lo creamos nosotros
     public AccountService(AccountRepository accountRepository) {
@@ -79,5 +87,26 @@ public class AccountService {
 
         accountRepository.save(source);
         accountRepository.save(target);
+    }
+
+    // revisa una cuenta y la desactiva si tiene poco saldo y lleva mucho tiempo sin uso
+    // regla del enunciado: balance menor a Q50 y 6 meses sin actividad
+    public void desactivarSiAplica(UUID accountId) {
+        Account account = accountRepository.findById(accountId)
+                .orElseThrow(() -> new RuntimeException("cuenta no encontrada"));
+
+        // si ya esta inactiva, no hay nada que hacer
+        if (account.getStatus() == AccountStatus.INACTIVE) {
+            return;
+        }
+
+        boolean balanceBajo = account.getBalance().compareTo(LIMITE_BALANCE_INACTIVA) < 0;
+        boolean sinActividad = account.getLastActivityDate()
+                .isBefore(LocalDateTime.now().minusMonths(MESES_INACTIVIDAD));
+
+        if (balanceBajo && sinActividad) {
+            account.setStatus(AccountStatus.INACTIVE);
+            accountRepository.save(account);
+        }
     }
 }
