@@ -61,4 +61,23 @@ public class AccountService {
         account.setReservedAmount(account.getReservedAmount().subtract(amount));
         accountRepository.save(account);
     }
+
+    // aplica la transferencia de verdad, cuando payment ya aprobo la operacion
+    // se usa cuando llega el evento payment.approved
+    public void applyTransfer(UUID sourceAccountId, UUID targetAccountId, BigDecimal amount) {
+        Account source = accountRepository.findById(sourceAccountId)
+                .orElseThrow(() -> new RuntimeException("cuenta origen no encontrada"));
+        Account target = accountRepository.findById(targetAccountId)
+                .orElseThrow(() -> new RuntimeException("cuenta destino no encontrada"));
+
+        // a la cuenta origen: le baja el balance real y le quita lo reservado
+        source.setBalance(source.getBalance().subtract(amount));
+        source.setReservedAmount(source.getReservedAmount().subtract(amount));
+
+        // a la cuenta destino: le suma el balance
+        target.setBalance(target.getBalance().add(amount));
+
+        accountRepository.save(source);
+        accountRepository.save(target);
+    }
 }
