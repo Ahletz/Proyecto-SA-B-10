@@ -32,4 +32,33 @@ public class AccountService {
                 .orElseThrow(() -> new RuntimeException("cuenta no encontrada"));
         return account.getBalance().subtract(account.getReservedAmount());
     }
+
+    // aparta fondos de la cuenta para una transferencia, sin restarlos del balance todavia
+    // se usa cuando llega el evento transaction.created
+    public void reserveFunds(UUID accountId, BigDecimal amount) {
+        Account account = accountRepository.findById(accountId)
+                .orElseThrow(() -> new RuntimeException("cuenta no encontrada"));
+
+        BigDecimal disponible = account.getBalance().subtract(account.getReservedAmount());
+
+        // si no alcanza el saldo disponible, no se puede reservar
+        if (disponible.compareTo(amount) < 0) {
+            throw new RuntimeException("fondos insuficientes");
+        }
+
+        // suma el monto al cajon de reservado
+        account.setReservedAmount(account.getReservedAmount().add(amount));
+        accountRepository.save(account);
+    }
+
+    // libera fondos reservados cuando algo fallo despues, sin haber movido el balance real
+    // se usa en la compensacion de la saga
+    public void releaseFunds(UUID accountId, BigDecimal amount) {
+        Account account = accountRepository.findById(accountId)
+                .orElseThrow(() -> new RuntimeException("cuenta no encontrada"));
+
+        // resta el monto del cajon de reservado, ya no esta apartado
+        account.setReservedAmount(account.getReservedAmount().subtract(amount));
+        accountRepository.save(account);
+    }
 }
