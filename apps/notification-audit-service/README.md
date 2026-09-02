@@ -4,10 +4,11 @@ Este servicio consume eventos del broker RabbitMQ y registra la recepción para 
 
 ## Flujo esperado
 
-- Consume la queue `svc.notification.dev.customer`
-- Escucha eventos del tipo `customer.*`
-- Guarda el `eventId` para evitar duplicados
-- Loguea eventType, correlationId y payload
+- Consume la queue `svc.notification.dev.audit`
+- Escucha eventos `customer.#`, `transaction.#`, `account.#` y `payment.#`
+- Guarda el envelope y el `eventId` para evitar duplicados
+- Reintenta tres veces con backoff y envía fallos permanentes a la DLQ
+- Expone `GET /api/audit/events` en el puerto `8082`
 
 ## Variables de entorno
 
@@ -32,7 +33,11 @@ mvn spring-boot:run
 
 ## Verificar consumo
 
-1. Levantar infraestructura con Docker Compose
+1. Levantar infraestructura y servicios con Docker Compose desde `infrastructure/`
 2. Registrar un cliente en Customer Service
-3. Revisar la queue `svc.notification.dev.customer` en RabbitMQ UI
-4. Confirmar que el servicio procesa el evento y guarda el registro en PostgreSQL
+3. Consultar `http://localhost:8082/api/audit/events`
+4. Revisar la queue `svc.notification.dev.audit` en RabbitMQ UI
+5. Confirmar que el servicio procesa el evento y guarda el registro en PostgreSQL
+
+La respuesta de auditoría está limitada a los 200 eventos más recientes y contiene `eventId`,
+`eventType`, `version`, `correlationId`, `eventTimestamp`, `processedAt` y `payload`.

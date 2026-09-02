@@ -1,5 +1,16 @@
 import { create } from 'zustand';
 
+const readJsonSafely = async (response: Response) => {
+  const text = await response.text();
+  if (!text) return null;
+
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
+};
+
 export interface Customer {
   customerId: string;
   username: string;
@@ -31,19 +42,19 @@ export const useAuthStore = create<AuthState>((set) => ({
   register: async (username: string, email: string, password: string) => {
     set({ isLoading: true, error: null });
     try {
-      const response = await fetch('/api/register', {
+      const response = await fetch('/api/customers/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, email, password })
       });
       
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || 'Registro fallido');
+        const error = await readJsonSafely(response);
+        throw new Error(error?.message || 'Registro fallido');
       }
       
-      const data = await response.json();
-      set({ customer: data, isLoading: false });
+      const data = await readJsonSafely(response);
+      set({ customer: data ?? null, isLoading: false });
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Error al registrar';
       set({ error: message, isLoading: false });
@@ -54,20 +65,37 @@ export const useAuthStore = create<AuthState>((set) => ({
   login: async (username: string, password: string) => {
     set({ isLoading: true, error: null });
     try {
-      const response = await fetch('/api/login', {
+      const response = await fetch('/api/customers/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, password })
       });
       
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || 'Login fallido');
+        const error = await readJsonSafely(response);
+        throw new Error(error?.message || 'Login fallido');
       }
       
-      const data = await response.json();
-      localStorage.setItem('token', data.token);
-      set({ token: data.token, customer: data.customer, isLoading: false });
+      const data = await readJsonSafely(response);
+      if (!data?.token) {
+        throw new Error('No se recibió un token válido del servidor');
+      }
+
+      const token = data.token;
+      localStorage.setItem('token', token);
+
+      const meResponse = await fetch('/api/customers/me', {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (!meResponse.ok) {
+        throw new Error('No se pudo cargar el perfil del usuario');
+      }
+
+      const customer = await readJsonSafely(meResponse);
+      set({ token, customer: customer ?? null, isLoading: false });
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Error al iniciar sesión';
       set({ error: message, isLoading: false });
@@ -78,18 +106,18 @@ export const useAuthStore = create<AuthState>((set) => ({
   activate: async (token: string) => {
     set({ isLoading: true, error: null });
     try {
-      const response = await fetch(`/api/activate/${token}`, {
+      const response = await fetch(`/api/customers/activate/${token}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' }
       });
       
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || 'Activación fallida');
+        const error = await readJsonSafely(response);
+        throw new Error(error?.message || 'Activación fallida');
       }
       
-      const data = await response.json();
-      set({ customer: data, isLoading: false });
+      const data = await readJsonSafely(response);
+      set({ customer: data ?? null, isLoading: false });
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Error al activar cuenta';
       set({ error: message, isLoading: false });
@@ -105,7 +133,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   updateProfile: async (email: string, password?: string) => {
     set({ isLoading: true, error: null });
     try {
-      const response = await fetch('/api/me', {
+      const response = await fetch('/api/customers/me', {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -115,12 +143,12 @@ export const useAuthStore = create<AuthState>((set) => ({
       });
       
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || 'Error al actualizar perfil');
+        const error = await readJsonSafely(response);
+        throw new Error(error?.message || 'Error al actualizar perfil');
       }
       
-      const data = await response.json();
-      set({ customer: data, isLoading: false });
+      const data = await readJsonSafely(response);
+      set({ customer: data ?? null, isLoading: false });
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Error al actualizar perfil';
       set({ error: message, isLoading: false });

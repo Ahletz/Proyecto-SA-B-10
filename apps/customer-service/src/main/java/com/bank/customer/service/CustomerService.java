@@ -96,6 +96,19 @@ public class CustomerService {
         return Map.of("token", token);
     }
 
+    public Map<String, Object> getCurrentCustomer(String username) {
+        Customer c = repo.findByUsername(username)
+                .orElseThrow(() -> new ValidationException("Cliente no encontrado"));
+
+        return Map.of(
+                "customerId", "CUST-" + c.getId(),
+                "username", c.getUsername(),
+                "email", c.getEmail(),
+                "status", c.getStatus(),
+                "registeredAt", c.getCreatedAt() == null ? java.time.OffsetDateTime.now() : c.getCreatedAt()
+        );
+    }
+
     @Transactional
     public void activate(String activationToken, String correlationId) {
         Customer c = repo.findByActivationToken(activationToken)

@@ -6,10 +6,11 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.amqp.rabbit.annotation.RabbitListener;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Component;
 
 import java.time.OffsetDateTime;
+import java.time.format.DateTimeParseException;
 
 @Component
 public class CustomerEventListener {
@@ -23,16 +24,15 @@ public class CustomerEventListener {
         this.repository = repository;
     }
 
-    @RabbitListener(queues = "svc.notification.dev.customer")
-    public void onMessage(String message) {
+    public void onMessage(byte[] message) {
         try {
             JsonNode root = objectMapper.readTree(message);
             String eventId = root.path("eventId").asText();
             String eventType = root.path("eventType").asText();
             String correlationId = root.path("correlationId").asText();
 
-            if (eventId == null || eventId.isBlank()) {
-                throw new IllegalArgumentException("eventId requerido");
+            if (eventId.isBlank() || eventType.isBlank() || correlationId.isBlank()) {
+                throw new IllegalArgumentException("eventId, eventType y correlationId son requeridos");
             }
 
             if (repository.existsById(eventId)) {
@@ -40,11 +40,35 @@ public class CustomerEventListener {
                 return;
             }
 
-            repository.save(new ProcessedEvent(eventId, eventType, correlationId, OffsetDateTime.now()));
+                Integer version = root.path("version").isInt() ? root.path("version").asInt() : 1;
+                OffsetDateTime eventTimestamp = parseTimestamp(root.path("timestamp").asText(null));
+                String payload = root.path("payload").isMissingNode()
+                    ? "{}"
+                    : objectMapper.writeValueAsString(root.path("payload"));
+
+                try {
+                    repository.save(new ProcessedEvent(eventId, eventType, version, correlationId, payload,
+                            eventTimestamp, OffsetDateTime.now()));
+                } catch (DataIntegrityViolationException exception) {
+                    log.info("Evento duplicado ignorado: {}", eventId);
+                    return;
+                }
             log.info("Evento recibido: {} | correlationId={} | payload={}", eventType, correlationId, root.path("payload"));
         } catch (Exception e) {
             log.error("Error procesando mensaje de customer: {}", e.getMessage(), e);
             throw new RuntimeException("Error al procesar evento del customer", e);
+        }
+    }
+
+    private OffsetDateTime parseTimestamp(String timestamp) {
+        if (timestamp == null || timestamp.isBlank()) {
+            return null;
+        }
+
+        try {
+            return OffsetDateTime.parse(timestamp);
+        } catch (DateTimeParseException exception) {
+            throw new IllegalArgumentException("timestamp inválido", exception);
         }
     }
 }

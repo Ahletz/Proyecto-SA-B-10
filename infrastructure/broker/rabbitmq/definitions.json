@@ -23,17 +23,17 @@
   "policies": [],
   "queues": [
     {
-      "name": "svc.notification.dev.customer",
+      "name": "svc.notification.dev.audit",
       "vhost": "/",
       "durable": true,
       "auto_delete": false,
       "arguments": {
         "x-dead-letter-exchange": "dlx.bank.events",
-        "x-dead-letter-routing-key": "svc.notification.dev.customer.dlq"
+        "x-dead-letter-routing-key": "svc.notification.dev.audit.dlq"
       }
     },
     {
-      "name": "svc.notification.dev.customer.dlq",
+      "name": "svc.notification.dev.audit.dlq",
       "vhost": "/",
       "durable": true,
       "auto_delete": false,
@@ -64,17 +64,41 @@
     {
       "source": "bank.events",
       "vhost": "/",
-      "destination": "svc.notification.dev.customer",
+      "destination": "svc.notification.dev.audit",
       "destination_type": "queue",
-      "routing_key": "customer.*",
+      "routing_key": "customer.#",
+      "arguments": {}
+    },
+    {
+      "source": "bank.events",
+      "vhost": "/",
+      "destination": "svc.notification.dev.audit",
+      "destination_type": "queue",
+      "routing_key": "transaction.#",
+      "arguments": {}
+    },
+    {
+      "source": "bank.events",
+      "vhost": "/",
+      "destination": "svc.notification.dev.audit",
+      "destination_type": "queue",
+      "routing_key": "account.#",
+      "arguments": {}
+    },
+    {
+      "source": "bank.events",
+      "vhost": "/",
+      "destination": "svc.notification.dev.audit",
+      "destination_type": "queue",
+      "routing_key": "payment.#",
       "arguments": {}
     },
     {
       "source": "dlx.bank.events",
       "vhost": "/",
-      "destination": "svc.notification.dev.customer.dlq",
+      "destination": "svc.notification.dev.audit.dlq",
       "destination_type": "queue",
-      "routing_key": "svc.notification.dev.customer.dlq",
+      "routing_key": "svc.notification.dev.audit.dlq",
       "arguments": {}
     }
   ]

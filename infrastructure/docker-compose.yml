@@ -91,6 +91,34 @@ services:
     networks:
       - bank-net
 
+  notification-audit-service:
+    build:
+      context: ../apps/notification-audit-service
+      dockerfile: Dockerfile
+    container_name: notification-audit-service
+    restart: unless-stopped
+    ports:
+      - "8082:8082"
+    env_file:
+      - ../apps/notification-audit-service/.env.example
+    environment:
+      DB_HOST: notification-db
+      DB_PORT: 5432
+      DB_DATABASE: bank_notification
+      DB_USERNAME: notification_user
+      DB_PASSWORD: notification_password
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS}
+    depends_on:
+      notification-db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - bank-net
+
 volumes:
   customer_db_data:
   notification_db_data:

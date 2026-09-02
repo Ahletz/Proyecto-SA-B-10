@@ -42,6 +42,12 @@ public class CustomerController {
 
     // Endpoint nuevo: actualizar cliente autenticado (email y/o username).
     // El cliente se identifica por el JWT, no por un ID en la URL.
+    @GetMapping("/me")
+    public ResponseEntity<?> getMe(Authentication authentication) {
+        var result = service.getCurrentCustomer(authentication.getName());
+        return ResponseEntity.ok(result);
+    }
+
     @PutMapping("/me")
     public ResponseEntity<?> updateMe(@RequestBody @jakarta.validation.Valid UpdateCustomerRequest req,
                                        Authentication authentication,

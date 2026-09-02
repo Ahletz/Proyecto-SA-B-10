@@ -26,8 +26,8 @@ Este documento define el estándar mínimo para eventos en RabbitMQ dentro del p
 
 - Cada consumidor debe tener su propia cola durable.
 - Ejemplo actual:
-  - cola: `svc.notification.dev.customer`
-  - binding: `customer.*`
+  - cola: `svc.notification.dev.audit`
+  - bindings: `customer.#`, `transaction.#`, `account.#`, `payment.#`
 - Cuando un consumidor falle, el mensaje pasa a la DLQ asociada.
 
 ## 3) Retries y DLQ
@@ -36,7 +36,7 @@ Este documento define el estándar mínimo para eventos en RabbitMQ dentro del p
 - Los consumidores deben reintentar localmente con backoff.
 - Si falla definitivamente, el mensaje se mueve a la DLQ.
 - DLQ actual:
-  - `svc.notification.dev.customer.dlq`
+  - `svc.notification.dev.audit.dlq`
 
 ## 4) Idempotencia
 
