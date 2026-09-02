@@ -1,9 +1,13 @@
 package com.bankusac.account_service.service;
 
+import com.bankusac.account_service.config.RabbitMQConfig;
+import com.bankusac.account_service.events.BankEvent;
+import com.bankusac.account_service.events.FundsReservedPayload;
 import com.bankusac.account_service.model.Account;
 import com.bankusac.account_service.model.AccountStatus;
 import com.bankusac.account_service.model.AccountType;
 import com.bankusac.account_service.repository.AccountRepository;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -16,6 +20,7 @@ import java.util.UUID;
 public class AccountService {
 
     private final AccountRepository accountRepository;
+    private final RabbitTemplate rabbitTemplate;
 
     // limite de saldo para considerar una cuenta candidata a desactivarse
     private static final BigDecimal LIMITE_BALANCE_INACTIVA = new BigDecimal("50.00");
@@ -23,9 +28,10 @@ public class AccountService {
     // meses sin actividad para poder desactivar la cuenta
     private static final int MESES_INACTIVIDAD = 6;
 
-    // spring nos da el repository automaticamente aqui, no lo creamos nosotros
-    public AccountService(AccountRepository accountRepository) {
+    // spring nos da el repository y el rabbitTemplate automaticamente aqui
+    public AccountService(AccountRepository accountRepository, RabbitTemplate rabbitTemplate) {
         this.accountRepository = accountRepository;
+        this.rabbitTemplate = rabbitTemplate;
     }
 
     // crea una cuenta nueva para un cliente
@@ -41,9 +47,10 @@ public class AccountService {
         return account.getBalance().subtract(account.getReservedAmount());
     }
 
-    // aparta fondos de la cuenta para una transferencia, sin restarlos del balance todavia
+        // aparta fondos de la cuenta para una transferencia, sin restarlos del balance todavia
     // se usa cuando llega el evento transaction.created
-    public void reserveFunds(UUID accountId, BigDecimal amount) {
+    // ahora tambien publica account.funds.reserved para que Payment Service lo escuche
+    public void reserveFunds(UUID transactionId, UUID accountId, UUID targetAccountId, BigDecimal amount, String correlationId) {
         Account account = accountRepository.findById(accountId)
                 .orElseThrow(() -> new RuntimeException("cuenta no encontrada"));
 
@@ -57,6 +64,12 @@ public class AccountService {
         // suma el monto al cajon de reservado
         account.setReservedAmount(account.getReservedAmount().add(amount));
         accountRepository.save(account);
+
+        // arma el payload y el evento, y lo publica al broker
+        FundsReservedPayload payload = new FundsReservedPayload(transactionId, accountId, targetAccountId, amount);
+        BankEvent<FundsReservedPayload> event = new BankEvent<>("account.funds.reserved", correlationId, payload);
+
+        rabbitTemplate.convertAndSend(RabbitMQConfig.BANK_EXCHANGE, "account.funds.reserved", event);
     }
 
     // libera fondos reservados cuando algo fallo despues, sin haber movido el balance real
