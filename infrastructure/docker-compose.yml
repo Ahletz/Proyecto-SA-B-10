@@ -1,0 +1,67 @@
+services:
+  customer-db:
+    image: postgres:16-alpine
+    container_name: customer-db
+    environment:
+      POSTGRES_DB: bank_customer
+      POSTGRES_USER: customer_user
+      POSTGRES_PASSWORD: customer_password
+    ports:
+      - "5433:5432"
+    volumes:
+      - customer_data:/var/lib/postgresql/data
+
+  transaction-db:
+    image: postgres:16-alpine
+    container_name: transaction-db
+    environment:
+      POSTGRES_DB: bank_transaction
+      POSTGRES_USER: transaction_user
+      POSTGRES_PASSWORD: transaction_password
+    ports:
+      - "5434:5432"
+    volumes:
+      - transaction_data:/var/lib/postgresql/data
+
+  notification-db:
+    image: postgres:16-alpine
+    container_name: notification-db
+    environment:
+      POSTGRES_DB: bank_notification
+      POSTGRES_USER: notification_user
+      POSTGRES_PASSWORD: notification_password
+    ports:
+      - "5435:5432"
+    volumes:
+      - notification_data:/var/lib/postgresql/data
+
+  account-db:
+    image: postgres:16-alpine
+    container_name: account-db
+    environment:
+      POSTGRES_DB: bank_account
+      POSTGRES_USER: account_user
+      POSTGRES_PASSWORD: account_password
+    ports:
+      - "5436:5432"
+    volumes:
+      - account_data:/var/lib/postgresql/data
+
+  payment-db:
+    image: postgres:16-alpine
+    container_name: payment-db
+    environment:
+      POSTGRES_DB: bank_payment
+      POSTGRES_USER: payment_user
+      POSTGRES_PASSWORD: payment_password
+    ports:
+      - "5437:5432"
+    volumes:
+      - payment_data:/var/lib/postgresql/data
+
+volumes:
+  customer_data:
+  transaction_data:
+  notification_data:
+  account_data:
+  payment_data:
