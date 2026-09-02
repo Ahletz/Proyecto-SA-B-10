@@ -27,4 +27,24 @@ public class RabbitMQConfig {
     public Binding fundsReservedBinding(Queue fundsReservedQueue, TopicExchange bankExchange) {
         return BindingBuilder.bind(fundsReservedQueue).to(bankExchange).with("account.funds.reserved");
     }
+
+    // traductor que convierte JSON <-> objetos Java automaticamente para RabbitMQ
+    // registramos el modulo de fechas para que sepa manejar Instant
+    @Bean
+    public org.springframework.amqp.support.converter.MessageConverter jsonMessageConverter() {
+        com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+        mapper.registerModule(new com.fasterxml.jackson.datatype.jsr310.JavaTimeModule());
+        return new org.springframework.amqp.support.converter.Jackson2JsonMessageConverter(mapper);
+    }
+
+    // le dice a RabbitTemplate que use el traductor JSON al publicar mensajes
+    @Bean
+    public org.springframework.amqp.rabbit.core.RabbitTemplate rabbitTemplate(
+            org.springframework.amqp.rabbit.connection.ConnectionFactory connectionFactory,
+            org.springframework.amqp.support.converter.MessageConverter jsonMessageConverter) {
+        org.springframework.amqp.rabbit.core.RabbitTemplate template =
+                new org.springframework.amqp.rabbit.core.RabbitTemplate(connectionFactory);
+        template.setMessageConverter(jsonMessageConverter);
+        return template;
+    }
 }
