@@ -1,0 +1,37 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: account-service
+  labels:
+    app: account-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: account-service
+  template:
+    metadata:
+      labels:
+        app: account-service
+    spec:
+      containers:
+        - name: account-service
+          image: account-service:latest
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 8081
+          env:
+            - name: SPRING_DATASOURCE_URL
+              value: "jdbc:postgresql://host.minikube.internal:5436/bank_account"
+            - name: SPRING_DATASOURCE_USERNAME
+              value: "account_user"
+            - name: SPRING_DATASOURCE_PASSWORD
+              value: "account_password"
+            - name: SPRING_RABBITMQ_HOST
+              value: "host.minikube.internal"
+            - name: SPRING_RABBITMQ_PORT
+              value: "5672"
+            - name: SPRING_RABBITMQ_USERNAME
+              value: "bankusac"
+            - name: SPRING_RABBITMQ_PASSWORD
+              value: "bankusac_password"
