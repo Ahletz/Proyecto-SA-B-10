@@ -23,3 +23,6 @@ coverage/
 
 tmp/
 temp/
+
+HojaRuta_1.md
+infrastructure/broker/rabbitmq/log/erl_crash.dump
