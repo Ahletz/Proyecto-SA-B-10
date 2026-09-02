@@ -9,6 +9,8 @@ import com.bankusac.account_service.model.AccountType;
 import com.bankusac.account_service.repository.AccountRepository;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.stereotype.Service;
+import com.bankusac.account_service.exception.BankException;
+import com.bankusac.account_service.exception.ErrorCode;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -43,7 +45,7 @@ public class AccountService {
     // devuelve el saldo disponible real, restando lo que esta reservado
     public BigDecimal getAvailableBalance(UUID accountId) {
         Account account = accountRepository.findById(accountId)
-                .orElseThrow(() -> new RuntimeException("cuenta no encontrada"));
+                .orElseThrow(() -> new BankException(ErrorCode.ACCOUNT_NOT_FOUND, "cuenta no encontrada"));
         return account.getBalance().subtract(account.getReservedAmount());
     }
 
@@ -52,13 +54,13 @@ public class AccountService {
     // ahora tambien publica account.funds.reserved para que Payment Service lo escuche
     public void reserveFunds(UUID transactionId, UUID accountId, UUID targetAccountId, BigDecimal amount, String correlationId) {
         Account account = accountRepository.findById(accountId)
-                .orElseThrow(() -> new RuntimeException("cuenta no encontrada"));
+                .orElseThrow(() -> new BankException(ErrorCode.ACCOUNT_NOT_FOUND, "cuenta no encontrada"));
 
         BigDecimal disponible = account.getBalance().subtract(account.getReservedAmount());
 
         // si no alcanza el saldo disponible, no se puede reservar
         if (disponible.compareTo(amount) < 0) {
-            throw new RuntimeException("fondos insuficientes");
+            throw new BankException(ErrorCode.INSUFFICIENT_FUNDS, "fondos insuficientes");
         }
 
         // suma el monto al cajon de reservado
@@ -76,7 +78,7 @@ public class AccountService {
     // se usa en la compensacion de la saga
     public void releaseFunds(UUID accountId, BigDecimal amount) {
         Account account = accountRepository.findById(accountId)
-                .orElseThrow(() -> new RuntimeException("cuenta no encontrada"));
+                .orElseThrow(() -> new BankException(ErrorCode.ACCOUNT_NOT_FOUND, "cuenta no encontrada"));
 
         // resta el monto del cajon de reservado, ya no esta apartado
         account.setReservedAmount(account.getReservedAmount().subtract(amount));
@@ -87,9 +89,9 @@ public class AccountService {
     // se usa cuando llega el evento payment.approved
     public void applyTransfer(UUID sourceAccountId, UUID targetAccountId, BigDecimal amount) {
         Account source = accountRepository.findById(sourceAccountId)
-                .orElseThrow(() -> new RuntimeException("cuenta origen no encontrada"));
+        .orElseThrow(() -> new BankException(ErrorCode.ACCOUNT_NOT_FOUND, "cuenta origen no encontrada"));
         Account target = accountRepository.findById(targetAccountId)
-                .orElseThrow(() -> new RuntimeException("cuenta destino no encontrada"));
+        .orElseThrow(() -> new BankException(ErrorCode.ACCOUNT_NOT_FOUND, "cuenta destino no encontrada"));
 
         // a la cuenta origen: le baja el balance real y le quita lo reservado
         source.setBalance(source.getBalance().subtract(amount));
@@ -106,7 +108,7 @@ public class AccountService {
     // regla del enunciado: balance menor a Q50 y 6 meses sin actividad
     public void desactivarSiAplica(UUID accountId) {
         Account account = accountRepository.findById(accountId)
-                .orElseThrow(() -> new RuntimeException("cuenta no encontrada"));
+                .orElseThrow(() -> new BankException(ErrorCode.ACCOUNT_NOT_FOUND, "cuenta no encontrada"));
 
         // si ya esta inactiva, no hay nada que hacer
         if (account.getStatus() == AccountStatus.INACTIVE) {
