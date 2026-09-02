@@ -1,0 +1,39 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: notification-audit-service
+  labels:
+    app: notification-audit-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: notification-audit-service
+  template:
+    metadata:
+      labels:
+        app: notification-audit-service
+    spec:
+      containers:
+        - name: notification-audit-service
+          image: notification-audit-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8082
+          envFrom:
+            - configMapRef:
+                name: notification-audit-service-config
+            - secretRef:
+                name: notification-audit-service-secret
+          readinessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8082
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8082
+            initialDelaySeconds: 30
+            periodSeconds: 15

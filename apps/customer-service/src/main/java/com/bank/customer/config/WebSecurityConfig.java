@@ -18,7 +18,12 @@ public class WebSecurityConfig {
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(sess -> sess.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/api/customers/register", "/api/customers/login", "/actuator/**").permitAll()
+                        .requestMatchers(
+                                "/api/customers/register",
+                                "/api/customers/login",
+                                "/api/customers/activate/**",
+                                "/actuator/**"
+                        ).permitAll()
                         .anyRequest().authenticated()
                 )
                 .httpBasic(Customizer.withDefaults());

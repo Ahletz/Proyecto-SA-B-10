@@ -1,51 +1,70 @@
-# Convenciones de mensajería (Broker) — v1 (borrador)
+# Convenciones de mensajería (Broker) — v1
 
-Este documento establece las convenciones mínimas para publicar/consumir eventos en RabbitMQ dentro del proyecto.
+Este documento define el estándar mínimo para eventos en RabbitMQ dentro del proyecto.
 
-Resumen rápido
-- Exchange principal: `bank.events` (tipo: `topic`, durable)
-- Routing key: `customer.<action>` o `customer.<entity>.<action>` (p.ej. `customer.registered`, `customer.profile.updated`)
-- Queues: `svc.<consumer>.<env>.customer` (p.ej. `svc.notification.dev.customer`)
-- Mensajes: JSON, `Content-Type: application/json; charset=utf-8`, delivery_mode=2 (persistente)
-- Headers recomendados: `correlationId`, `eventId`, `version`
+## Resumen
 
-1) Exchanges y routing
-- Usar un único exchange lógico `bank.events` de tipo `topic` para eventos del dominio.
-- Las routing keys siguen la convención: `<bounded_context>.<entity>.<action>` o `<bounded_context>.<action>` si aplica. Para Customer preferir `customer.<action>`.
+- Exchange principal: `bank.events` (tipo `topic`, durable)
+- Routing key recomendada: `customer.*` o `entity.action`
+- Queue patrón: `svc.<consumer>.<env>.<entity>`
+- DLQ patrón: `svc.<consumer>.<env>.<entity>.dlq`
+- Encabezados recomendados: `eventId`, `correlationId`, `version`
+- Mensajes JSON con `Content-Type: application/json`
 
-2) Queues y binding
-- Cada servicio consumidor crea su propia queue durable y la bindea al exchange con la routing key necesaria.
-- Nombre de queue: `svc.<consumer>.<env>.<entity>` donde `env` es `dev|stg|prod`.
+## 1) Exchange y routing
 
-3) Delivery, retries y DLQ
-- Mensajes persistentes (delivery_mode=2).
-- Implementar retry por consumidor con backoff exponencial. Reintentos locales preferibles a republish centralizado.
-- En caso de fallos permanentes, mover el mensaje a una Dead Letter Queue (DLQ) específica: `dlq.svc.<consumer>.<env>.<entity>`.
-- Es recomendable usar TTL + requeue pattern para retrasar reintentos en vez de bloquear el consumer.
+- El exchange global de la plataforma es `bank.events`.
+- Los productores publican con routing key basada en el dominio.
+- Para Customer, el patrón actual es `customer.*`.
+- Ejemplos:
+  - `customer.registered`
+  - `customer.registration.rejected`
+  - `customer.activated`
+  - `customer.updated`
 
-4) Idempotencia y deduplicación
-- Todo consumidor debe ser idempotente usando `eventId` como clave de deduplicación. Mantener una tabla simple `processed_events(event_id, consumed_at, status)` o cache con TTL.
+## 2) Colas y bindings
 
-5) Metadata y tracing
-- El `correlationId` lo genera el API Gateway y debe enviarse en los headers AMQP y en el body del evento.
-- Incluir `eventId` y `version` en headers para facilitar filtros y tracing en tooling.
+- Cada consumidor debe tener su propia cola durable.
+- Ejemplo actual:
+  - cola: `svc.notification.dev.customer`
+  - binding: `customer.*`
+- Cuando un consumidor falle, el mensaje pasa a la DLQ asociada.
 
-6) Versionado de eventos
-- Incrementar `version` en el envelope cuando cambie la estructura del `payload`.
-- Mantener compatibilidad hacia atrás cuando sea posible: consumidores deben ignorar campos desconocidos.
+## 3) Retries y DLQ
 
-7) Esquema y validación
-- Los contratos (JSON Schema) deben almacenarse junto a `docs/events/` y ser la referencia para validación en productores y consumidores.
+- Los mensajes deben ser persistentes.
+- Los consumidores deben reintentar localmente con backoff.
+- Si falla definitivamente, el mensaje se mueve a la DLQ.
+- DLQ actual:
+  - `svc.notification.dev.customer.dlq`
 
-8) Ejemplo básico de binding (RabbitMQ CLI / definitions)
+## 4) Idempotencia
 
-	- Exchange: `bank.events` (topic)
-	- Queue: `svc.notification.dev.customer`
-	- Binding key: `customer.*`
+- Todo evento debe incluir `eventId`.
+- Los consumidores deben guardar ese `eventId` para ignorar duplicados.
+- La tabla recomendada es `processed_events` con `event_id` como PK.
 
-9) Cambios y gobernanza
-- Cualquier cambio a estas convenciones debe revisarse con al menos otro integrante y registrarse en control de versiones en `docs/events/`.
+## 5) Tracing y correlación
 
-Notas
-- Estas convenciones son un punto de partida; adaptarlas si se acuerda otra estrategia (p.ej. event mesh, broker por ambiente, o uso de headers más ricos).
+- `correlationId` debe propagase por todo el flujo distribuido.
+- Se debe conservar tanto en el envelope del evento como en headers AMQP.
+
+## 6) Versionado
+
+- El envelope incluye `version`.
+- Si cambia el payload, se incrementa la versión.
+- Los consumidores deben tolerar campos adicionales.
+
+## 7) Gobernanza
+
+- Cualquier cambio en las convenciones debe revisarse por al menos otro integrante.
+- La referencia viva es este documento y los contratos de `docs/events/`.
+
+## 8) Ejemplo de flujo actual
+
+- Productor: Customer Service
+- Exchange: `bank.events`
+- Routing key: `customer.registered`
+- Cola consumida: `svc.notification.dev.customer`
+- DLQ: `svc.notification.dev.customer.dlq`
 

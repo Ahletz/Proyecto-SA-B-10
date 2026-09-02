@@ -1,102 +1,130 @@
-Customer Service (scaffold)
+# Customer Service - pruebas por curl
 
-Endpoints:
-- POST /api/customers/register
-- POST /api/customers/login
-- POST /api/customers/activate/{customerId}
+Estas pruebas asumen que la infraestructura ya está levantada con Docker Compose y que el servicio de Customer Service está corriendo.
 
-Run locally (requires Java + Maven and access to PostgreSQL and RabbitMQ):
-
-```bash
-cd apps/customer-service
-mvn spring-boot:run
-```
-
-Or build Docker image and run (example):
-
-```bash
-docker build -t customer-service:local .
-docker run --rm -p 8081:8081 \
-  -e DB_HOST=host.docker.internal -e DB_PORT=5433 -e DB_DATABASE=bank_customer \
-  -e DB_USERNAME=customer_user -e DB_PASSWORD=customer_password \
-  -e RABBITMQ_HOST=host.docker.internal -e RABBITMQ_PORT=5672 -e RABBITMQ_DEFAULT_USER=rabbit_user \
-  -e RABBITMQ_DEFAULT_PASS=rabbit_password \
-  customer-service:local
-```
-
-Notes:
-- JWT issuance is stubbed with a UUID token in this scaffold; replace with a proper JWT generator in production.
-- Event publishing uses the `bank.events` exchange and routing key equal to the eventType.
-
-Tests and quick checks
-----------------------
-
-1) Prepare env and infra
-
-```bash
-# copy template env and edit secrets
-cp apps/customer-service/.env.example apps/customer-service/.env
-# (edit apps/customer-service/.env to set JWT_SECRET and other values)
-
-# start infrastructure (Postgres + RabbitMQ)
-cd infrastructure
-docker compose up -d
-```
-
-2) Start the service (Maven)
-
-```bash
-cd apps/customer-service
-mvn spring-boot:run
-```
-
-3) Register a user (returns status and customerId)
+## 1) Registrar un cliente
 
 ```bash
 curl -s -X POST http://localhost:8081/api/customers/register \
   -H "Content-Type: application/json" \
-  -d '{"email":"a@b.com","username":"user1","password":"secret123"}' | jq
+  -d '{
+    "email": "user1@example.com",
+    "username": "user1",
+    "password": "Secret123!"
+  }' | jq
 ```
 
-Expected: JSON with `status` and `customerId` when successful.
+Resultado esperado:
+- HTTP 200
+- JSON con `status`, `customerId` y `activationToken`
 
-4) Login to receive JWT
+## 2) Activar la cuenta con el token devuelto
+
+```bash
+TOKEN=$(curl -s -X POST http://localhost:8081/api/customers/register \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "user2@example.com",
+    "username": "user2",
+    "password": "Secret123!"
+  }' | jq -r '.activationToken')
+
+curl -i -X POST "http://localhost:8081/api/customers/activate/$TOKEN"
+```
+
+Resultado esperado:
+- HTTP 200
+- la cuenta queda en estado `ACTIVE`
+
+## 3) Login para obtener el JWT
 
 ```bash
 curl -s -X POST http://localhost:8081/api/customers/login \
   -H "Content-Type: application/json" \
-  -d '{"username":"user1","password":"secret123"}' | jq
+  -d '{
+    "username": "user1",
+    "password": "Secret123!"
+  }' | jq
 ```
 
-Expected: JSON with `token` (JWT). Save this token for authenticated requests.
+Resultado esperado:
+- HTTP 200
+- JSON con `token`
 
-5) Call a protected endpoint (activate) using the JWT
+Guardar el token para la siguiente prueba:
 
 ```bash
-TOKEN=<paste-token-here>
-curl -s -X POST http://localhost:8081/api/customers/activate/CUST-1 \
-  -H "Authorization: Bearer $TOKEN"
+JWT=$(curl -s -X POST http://localhost:8081/api/customers/login \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "user1",
+    "password": "Secret123!"
+  }' | jq -r '.token')
 ```
 
-6) Check health (Actuator)
+## 4) Actualizar perfil autenticado
 
 ```bash
-curl -s http://localhost:8081/actuator/health | jq
+curl -i -X PUT http://localhost:8081/api/customers/me \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $JWT" \
+  -d '{
+    "email": "user1.updated@example.com"
+  }'
 ```
 
-7) Docker run example (service + env)
+Resultado esperado:
+- HTTP 200
+- JSON con `status: ok`, `customerId` y `updatedFields`
+
+## 5) Validaciones negativas recomendadas
+
+### Login con contraseña incorrecta
 
 ```bash
-docker build -t customer-service:local apps/customer-service
-docker run --rm -p 8081:8081 \
-  --env-file apps/customer-service/.env \
-  -e DB_HOST=host.docker.internal -e DB_PORT=5433 -e DB_DATABASE=bank_customer \
-  -e DB_USERNAME=customer_user -e DB_PASSWORD=customer_password \
-  -e RABBITMQ_HOST=host.docker.internal -e RABBITMQ_PORT=5672 \
-  customer-service:local
+curl -i -X POST http://localhost:8081/api/customers/login \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "user1",
+    "password": "wrong-pass"
+  }'
 ```
 
-Notes (updated)
-- JWT creation is implemented using `apps/customer-service/.env` `JWT_SECRET` and `JWT_EXPIRATION_MS`.
-- Use the commands in `apps/customer-service/.env.example` to generate a secure secret (OpenSSL or /dev/urandom).
-- The service publishes events to the `bank.events` exchange; verify them via RabbitMQ management UI at `http://localhost:15672`.
+Debe responder con HTTP 401.
+
+### Activación con token inválido
+
+```bash
+curl -i -X POST http://localhost:8081/api/customers/activate/invalid-token
+```
+
+Debe responder con HTTP 400.
+
+## 6) Secuencia válida recomendada para pruebas manuales
+
+```bash
+# 1) registrar
+curl -s -X POST http://localhost:8081/api/customers/register \
+  -H "Content-Type: application/json" \
+  -d '{"email":"demo@example.com","username":"demo","password":"Secret123!"}' | jq
+
+# 2) copiar activationToken desde la respuesta y activar
+curl -i -X POST http://localhost:8081/api/customers/activate/<activationToken>
+
+# 3) login
+curl -s -X POST http://localhost:8081/api/customers/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"demo","password":"Secret123!"}' | jq
+
+# 4) actualizar perfil
+JWT=$(curl -s -X POST http://localhost:8081/api/customers/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"demo","password":"Secret123!"}' | jq -r '.token')
+
+curl -i -X PUT http://localhost:8081/api/customers/me \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $JWT" \
+  -d '{"username":"demo2"}'
+```
+
+> Importante: la cuenta debe estar activa antes de poder hacer login. El registro devuelve un `activationToken` temporal y el flujo correcto es: registrar → activar → login → actualizar perfil autenticado.

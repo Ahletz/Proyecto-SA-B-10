@@ -1,6 +1,8 @@
 # Contratos de Eventos - Clientes (Customer Service)
 
 > **Estado:** Borrador propuesto por Integrante 1. Pendiente de revisión por el equipo antes de congelarse como versión 1, siguiendo la regla del plan de distribución ("la carpeta de contratos se modifica mediante revisión de al menos otro integrante").
+>
+> **Actualización:** se agregó `activationToken` al payload de `customer.registered`, necesario para que Notification & Audit pueda armar el link de activación en el correo.
 
 ## 1. Objetivo
 
@@ -36,17 +38,6 @@ Se reutiliza la misma estructura base definida en `transaction-events.md`, para 
 
 El `correlationId` se recibe del API Gateway (no lo genera Customer Service) y debe conservarse en todos los eventos derivados de esa solicitud.
 
-### 2.1. Metadata de mensajería (recomendado)
-
-- **Exchange recomendado:** `bank.events` (tipo `topic`, durable)
-- **Routing key (pattern):** `customer.<entity>.<action>` o `customer.<action>` — p.ej. `customer.registered` o `customer.updated`
-- **Queue naming (consumidor):** `svc.<consumer>.<env>.customer` — p.ej. `svc.notification.dev.customer`
-- **AMQP properties / headers:** enviar `correlationId` y `eventId` también como propiedades/mensajes headers para facilitar tracing en el broker.
-- **Content-Type:** `application/json; charset=utf-8`
-- **Delivery:** mensajes persistentes (delivery_mode=2), exchanges y queues durables.
-
-Estas convenciones pueden ajustarse desde `docs/events/README.md` cuando el equipo acuerde el estándar global.
-
 ## 3. Eventos de Customer Service
 
 ### customer.registered
@@ -65,33 +56,13 @@ Payload:
       "customerId": "CUST-001",
       "email": "cliente@example.com",
       "username": "usuario1",
-      "status": "PENDING_ACTIVATION"
+      "status": "PENDING_ACTIVATION",
+      "activationToken": "e4e1e3b2-....-....-....-............"
     }
 
-JSON Schema (v1):
-
-    {
-      "$schema": "http://json-schema.org/draft-07/schema#",
-      "type": "object",
-      "required": ["eventId","eventType","version","timestamp","correlationId","payload"],
-      "properties": {
-        "eventId": {"type":"string"},
-        "eventType": {"type":"string","enum":["customer.registered"]},
-        "version": {"type":"integer","minimum":1},
-        "timestamp": {"type":"string","format":"date-time"},
-        "correlationId": {"type":"string"},
-        "payload": {
-          "type":"object",
-          "required":["customerId","email","username","status"],
-          "properties":{
-            "customerId":{"type":"string"},
-            "email":{"type":"string","format":"email"},
-            "username":{"type":"string"},
-            "status":{"type":"string","enum":["PENDING_ACTIVATION","ACTIVE","INACTIVE"]}
-          }
-        }
-      }
-    }
+Notas:
+- `activationToken` es de un solo uso: se invalida (se pone en null) apenas se consume en `POST /api/customers/activate/{token}`.
+- Notification & Audit debe usar este campo para construir el link de activación del correo (URL exacta pendiente de acordar con el frontend, p.ej. `https://.../activar?token={activationToken}`).
 
 ### customer.registration.rejected
 
@@ -110,30 +81,11 @@ Payload:
       "reason": "VALIDATION_ERROR"
     }
 
-JSON Schema (v1):
-
-    {
-      "$schema": "http://json-schema.org/draft-07/schema#",
-      "type":"object",
-      "required":["eventId","eventType","version","timestamp","correlationId","payload"],
-      "properties":{
-        "eventType":{"type":"string","enum":["customer.registration.rejected"]},
-        "payload":{
-          "type":"object",
-          "required":["email","reason"],
-          "properties":{
-            "email":{"type":"string","format":"email"},
-            "reason":{"type":"string","enum":["VALIDATION_ERROR","DUPLICATE_EVENT","INTERNAL_ERROR"]}
-          }
-        }
-      }
-    }
-
 Valores posibles de `reason`: `VALIDATION_ERROR`, `DUPLICATE_EVENT`.
 
 ### customer.activated
 
-Indica que el cliente activó su cuenta mediante el enlace/correo de activación, en su primer login.
+Indica que el cliente activó su cuenta mediante el enlace/correo de activación.
 
 Productor:
 - Customer Service
@@ -149,29 +101,9 @@ Payload:
       "status": "ACTIVE"
     }
 
-JSON Schema (v1):
-
-    {
-      "$schema": "http://json-schema.org/draft-07/schema#",
-      "type":"object",
-      "required":["eventId","eventType","version","timestamp","correlationId","payload"],
-      "properties":{
-        "eventType":{"type":"string","enum":["customer.activated"]},
-        "payload":{
-          "type":"object",
-          "required":["customerId","username","status"],
-          "properties":{
-            "customerId":{"type":"string"},
-            "username":{"type":"string"},
-            "status":{"type":"string","enum":["ACTIVE"]}
-          }
-        }
-      }
-    }
-
 ### customer.updated
 
-Indica que se actualizaron los datos de un cliente existente.
+Indica que se actualizaron los datos de un cliente existente (email y/o username).
 
 Productor:
 - Customer Service
@@ -184,25 +116,6 @@ Payload:
     {
       "customerId": "CUST-001",
       "updatedFields": ["email", "username"]
-    }
-
-JSON Schema (v1):
-
-    {
-      "$schema":"http://json-schema.org/draft-07/schema#",
-      "type":"object",
-      "required":["eventId","eventType","version","timestamp","correlationId","payload"],
-      "properties":{
-        "eventType":{"type":"string","enum":["customer.updated"]},
-        "payload":{
-          "type":"object",
-          "required":["customerId","updatedFields"],
-          "properties":{
-            "customerId":{"type":"string"},
-            "updatedFields":{"type":"array","items":{"type":"string"}}
-          }
-        }
-      }
     }
 
 ## 4. Códigos de razón/error utilizados en este contrato
@@ -219,7 +132,6 @@ Reutilizando el catálogo común acordado por el equipo:
 2. No se utilizará HTTP entre microservicios; solo el broker.
 3. Todo evento debe contener `eventId`.
 4. Todo evento debe contener `correlationId`, propagado desde el API Gateway.
-5. Los consumidores (Notification & Audit) deben implementar idempotencia utilizando `eventId` y/o una tabla de procesamiento de eventos para evitar efectos duplicados.
-6. Se recomienda implementar un mecanismo de retry exponencial con backoff y una Dead Letter Queue (DLQ) por cada consumidor para mensajes no procesables.
-7. Los eventos deben versionarse cuando cambie la estructura del `payload`. Incrementar la propiedad `version` y documentar la migración.
-8. Cualquier cambio en este documento debe pasar por revisión de al menos otro integrante antes de marcarse como `v1`.
+5. Los consumidores (Notification & Audit) deben implementar idempotencia utilizando `eventId`.
+6. Los errores temporales podrán procesarse nuevamente mediante retries.
+7. Este contrato deberá versionarse si cambia su estructura, siguiendo la misma convención que `transaction-events.md`.

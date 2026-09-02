@@ -2,9 +2,10 @@ package com.bank.customer.controller;
 
 import com.bank.customer.dto.LoginRequest;
 import com.bank.customer.dto.RegisterRequest;
-import com.bank.customer.model.Customer;
+import com.bank.customer.dto.UpdateCustomerRequest;
 import com.bank.customer.service.CustomerService;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -18,7 +19,8 @@ public class CustomerController {
     }
 
     @PostMapping("/register")
-    public ResponseEntity<?> register(@RequestBody @jakarta.validation.Valid RegisterRequest req, @RequestHeader(value = "X-Correlation-Id", required = false) String correlationId) {
+    public ResponseEntity<?> register(@RequestBody @jakarta.validation.Valid RegisterRequest req,
+                                       @RequestHeader(value = "X-Correlation-Id", required = false) String correlationId) {
         var result = service.register(req, correlationId);
         return ResponseEntity.ok(result);
     }
@@ -29,10 +31,22 @@ public class CustomerController {
         return ResponseEntity.ok(token);
     }
 
-    @PostMapping("/activate/{customerId}")
-    public ResponseEntity<?> activate(@PathVariable String customerId, @RequestHeader(value = "X-Correlation-Id", required = false) String correlationId) {
-        service.activate(customerId, correlationId);
+    // Antes era /activate/{customerId}. Ahora recibe el token real que se manda
+    // por correo (o que devuelve /register mientras no exista el envío de correo).
+    @PostMapping("/activate/{token}")
+    public ResponseEntity<?> activate(@PathVariable String token,
+                                       @RequestHeader(value = "X-Correlation-Id", required = false) String correlationId) {
+        service.activate(token, correlationId);
         return ResponseEntity.ok().build();
     }
 
+    // Endpoint nuevo: actualizar cliente autenticado (email y/o username).
+    // El cliente se identifica por el JWT, no por un ID en la URL.
+    @PutMapping("/me")
+    public ResponseEntity<?> updateMe(@RequestBody @jakarta.validation.Valid UpdateCustomerRequest req,
+                                       Authentication authentication,
+                                       @RequestHeader(value = "X-Correlation-Id", required = false) String correlationId) {
+        var result = service.updateCustomer(authentication.getName(), req, correlationId);
+        return ResponseEntity.ok(result);
+    }
 }

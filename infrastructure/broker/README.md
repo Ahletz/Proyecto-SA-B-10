@@ -1,29 +1,55 @@
-Broker local (RabbitMQ) — instrucciones
+# Broker local (RabbitMQ)
 
-Preparación
+## Estado
 
-- Copiar el template a `.env`:
+El broker queda definido de forma reproducible para el proyecto, con:
+- exchange principal `bank.events`
+- queue del consumidor `svc.notification.dev.customer`
+- DLQ `svc.notification.dev.customer.dlq`
+- binding `customer.*`
+- credenciales inicializadas por `.env`
+
+## Preparación
 
 ```bash
 cp infrastructure/broker/.env.example infrastructure/broker/.env
 ```
 
-- (Opcional) editar credenciales en `infrastructure/broker/.env`.
+Editar credenciales si hace falta.
 
-Levantar servicios localmente
+## Levantar infraestructura
 
 ```bash
 cd infrastructure
 docker compose up -d
 ```
 
-Acceder a la interfaz de administración de RabbitMQ en `http://localhost:15672` con las credenciales del `.env`.
+Acceder a la UI:
 
-Definiciones
+```text
+http://localhost:15672
+```
 
-- El archivo `infrastructure/broker/rabbitmq/definitions.json` se monta en `/etc/rabbitmq/definitions.json` dentro del contenedor. Puedes prellenarlo con exchanges, queues y bindings si quieres inicializar la configuración.
+Usuario/contraseña por defecto:
 
-Limpiar
+```text
+rabbit_user / rabbit_password
+```
+
+## Definiciones cargadas
+
+El archivo [infrastructure/broker/rabbitmq/definitions.json](infrastructure/broker/rabbitmq/definitions.json) monta el estado inicial del broker al arrancar el contenedor.
+
+## Reglas de uso
+
+- Exchange principal: `bank.events` (topic)
+- Routing key: `customer.*` para eventos de Customer y `entity.action` cuando aplique
+- Todas las queues deben ser durables
+- Todo consumidor debe manejar idempotencia con `eventId`
+- Los fallos permanentes deben ir a la DLQ
+- Cada servicio define su propia queue y binding
+
+## Limpieza
 
 ```bash
 cd infrastructure
