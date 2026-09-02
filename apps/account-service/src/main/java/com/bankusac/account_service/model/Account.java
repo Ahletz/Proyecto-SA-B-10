@@ -13,7 +13,14 @@ public class Account {
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID accountId;
+    
+    // guarda el id de la transaccion activa mientras hay fondos reservados
+    // permite saber que transferencia estamos procesando cuando llega payment.approved/rejected
+    @Column
+    private UUID pendingTransactionId;
 
+    @Column
+    private UUID pendingTargetAccount;
     // a que cliente pertenece esta cuenta
     @Column(nullable = false)
     private UUID customerId;
@@ -106,5 +113,20 @@ public class Account {
 
     public void setLastActivityDate(LocalDateTime lastActivityDate) {
         this.lastActivityDate = lastActivityDate;
+    }
+        public UUID getPendingTransactionId() {
+        return pendingTransactionId;
+    }
+
+    public void setPendingTransactionId(UUID pendingTransactionId) {
+        this.pendingTransactionId = pendingTransactionId;
+    }
+
+    public UUID getPendingTargetAccount() {
+        return pendingTargetAccount;
+    }
+
+    public void setPendingTargetAccount(UUID pendingTargetAccount) {
+        this.pendingTargetAccount = pendingTargetAccount;
     }
 }
