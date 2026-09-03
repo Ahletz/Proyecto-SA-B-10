@@ -42,6 +42,11 @@ public class PaymentService {
         return paymentRepository.save(payment);
     }
 
+    // devuelve todos los pagos registrados
+    public java.util.List<Payment> getAllPayments() {
+        return paymentRepository.findAllByOrderByPaymentIdDesc();
+    }
+
     // se ejecuta cuando llega account.funds.reserved
     // valida la operacion y publica payment.approved o payment.rejected
     public void handleFundsReserved(String incomingEventId, UUID transactionId, BigDecimal amount, String correlationId) {

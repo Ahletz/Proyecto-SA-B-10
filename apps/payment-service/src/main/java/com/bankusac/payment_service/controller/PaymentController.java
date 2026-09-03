@@ -4,7 +4,8 @@ import com.bankusac.payment_service.model.Payment;
 import com.bankusac.payment_service.service.PaymentService;
 import org.springframework.web.bind.annotation.*;
 
-// la ventanilla por donde entran las peticiones HTTP para pagos
+import java.util.List;
+
 @RestController
 @RequestMapping("/api/payments")
 public class PaymentController {
@@ -15,9 +16,14 @@ public class PaymentController {
         this.paymentService = paymentService;
     }
 
-    // POST /api/payments - procesa un pago con los datos que manda el frontend
     @PostMapping
     public Payment processPayment(@RequestBody ProcessPaymentRequest request) {
         return paymentService.processPayment(request.getTransactionId(), request.getAmount());
+    }
+
+    // GET /api/payments - lista el historial de pagos
+    @GetMapping
+    public List<Payment> getAllPayments() {
+        return paymentService.getAllPayments();
     }
 }
