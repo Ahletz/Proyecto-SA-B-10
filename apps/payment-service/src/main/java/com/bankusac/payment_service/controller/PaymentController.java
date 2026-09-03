@@ -4,9 +4,6 @@ import com.bankusac.payment_service.model.Payment;
 import com.bankusac.payment_service.service.PaymentService;
 import org.springframework.web.bind.annotation.*;
 
-import java.math.BigDecimal;
-import java.util.UUID;
-
 // la ventanilla por donde entran las peticiones HTTP para pagos
 @RestController
 @RequestMapping("/api/payments")
@@ -18,10 +15,9 @@ public class PaymentController {
         this.paymentService = paymentService;
     }
 
-    // POST /api/payments - procesa un pago de prueba
+    // POST /api/payments - procesa un pago con los datos que manda el frontend
     @PostMapping
-    public Payment processPayment() {
-        UUID transactionIdDePrueba = UUID.randomUUID();
-        return paymentService.processPayment(transactionIdDePrueba, new BigDecimal("500.00"));
+    public Payment processPayment(@RequestBody ProcessPaymentRequest request) {
+        return paymentService.processPayment(request.getTransactionId(), request.getAmount());
     }
 }
