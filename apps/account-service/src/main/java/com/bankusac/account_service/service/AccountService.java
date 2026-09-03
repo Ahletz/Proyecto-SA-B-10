@@ -39,6 +39,11 @@ public class AccountService {
         return accountRepository.save(account);
     }
 
+    // devuelve todas las cuentas de un cliente
+    public java.util.List<Account> getAccountsByCustomer(UUID customerId) {
+        return accountRepository.findByCustomerId(customerId);
+    }
+
     public BigDecimal getAvailableBalance(UUID accountId) {
         Account account = accountRepository.findById(accountId)
                 .orElseThrow(() -> new BankException(ErrorCode.ACCOUNT_NOT_FOUND, "cuenta no encontrada"));

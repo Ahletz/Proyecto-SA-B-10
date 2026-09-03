@@ -5,9 +5,9 @@ import com.bankusac.account_service.service.AccountService;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.UUID;
 
-// la ventanilla por donde entran las peticiones HTTP para cuentas
 @RestController
 @RequestMapping("/api/accounts")
 public class AccountController {
@@ -18,7 +18,6 @@ public class AccountController {
         this.accountService = accountService;
     }
 
-    // POST /api/accounts - crea una cuenta nueva con los datos que manda el frontend
     @PostMapping
     public Account createAccount(@RequestBody CreateAccountRequest request) {
         return accountService.createAccount(
@@ -28,9 +27,14 @@ public class AccountController {
         );
     }
 
-    // GET /api/accounts/{id}/balance - consulta el saldo disponible de una cuenta
     @GetMapping("/{id}/balance")
     public BigDecimal getBalance(@PathVariable UUID id) {
         return accountService.getAvailableBalance(id);
+    }
+
+    // GET /api/accounts/customer/{customerId} - lista las cuentas de un cliente
+    @GetMapping("/customer/{customerId}")
+    public List<Account> getAccountsByCustomer(@PathVariable UUID customerId) {
+        return accountService.getAccountsByCustomer(customerId);
     }
 }
