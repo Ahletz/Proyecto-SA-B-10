@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: notification-audit-service-config
+  labels:
+    app: notification-audit-service
+data:
+  SERVER_PORT: "8082"
+  DB_HOST: "notification-postgres"
+  DB_PORT: "5432"
+  DB_DATABASE: "bank_notification"
+  DB_SCHEMA: "public"
+  RABBITMQ_HOST: "rabbitmq"
+  RABBITMQ_PORT: "5672"

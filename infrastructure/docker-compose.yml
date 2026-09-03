@@ -1,76 +1,172 @@
 services:
   customer-db:
-    image: postgres:16-alpine
+    image: postgres:15
     container_name: customer-db
+    restart: unless-stopped
+    ports:
+      - "5433:5432"
     environment:
       POSTGRES_DB: bank_customer
       POSTGRES_USER: customer_user
       POSTGRES_PASSWORD: customer_password
-    ports:
-      - "5433:5432"
     volumes:
-      - customer_data:/var/lib/postgresql/data
-
-  transaction-db:
-    image: postgres:16-alpine
-    container_name: transaction-db
-    environment:
-      POSTGRES_DB: bank_transaction
-      POSTGRES_USER: transaction_user
-      POSTGRES_PASSWORD: transaction_password
-    ports:
-      - "5434:5432"
-    volumes:
-      - transaction_data:/var/lib/postgresql/data
+      - customer_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB} -h localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - bank-net
 
   notification-db:
-    image: postgres:16-alpine
+    image: postgres:15
     container_name: notification-db
+    restart: unless-stopped
+    ports:
+      - "5435:5432"
     environment:
       POSTGRES_DB: bank_notification
       POSTGRES_USER: notification_user
       POSTGRES_PASSWORD: notification_password
-    ports:
-      - "5435:5432"
     volumes:
-      - notification_data:/var/lib/postgresql/data
+      - notification_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB} -h localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - bank-net
 
   account-db:
-    image: postgres:16-alpine
+    image: postgres:15
     container_name: account-db
+    restart: unless-stopped
+    ports:
+      - "5436:5432"
     environment:
       POSTGRES_DB: bank_account
       POSTGRES_USER: account_user
       POSTGRES_PASSWORD: account_password
-    ports:
-      - "5436:5432"
     volumes:
-      - account_data:/var/lib/postgresql/data
+      - account_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB} -h localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - bank-net
 
   payment-db:
-    image: postgres:16-alpine
+    image: postgres:15
     container_name: payment-db
+    restart: unless-stopped
+    ports:
+      - "5437:5432"
     environment:
       POSTGRES_DB: bank_payment
       POSTGRES_USER: payment_user
       POSTGRES_PASSWORD: payment_password
-    ports:
-      - "5437:5432"
     volumes:
-      - payment_data:/var/lib/postgresql/data
+      - payment_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB} -h localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - bank-net
+
   rabbitmq:
-    image: rabbitmq:3-management-alpine
+    image: rabbitmq:3.11-management
     container_name: rabbitmq
+    restart: unless-stopped
     ports:
       - "5672:5672"
       - "15672:15672"
+    env_file:
+      - ./broker/.env
     environment:
-      RABBITMQ_DEFAULT_USER: bankusac
-      RABBITMQ_DEFAULT_PASS: bankusac_password
-      
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS}
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+      - rabbitmq_log:/var/log/rabbitmq
+      - ./broker/rabbitmq/definitions.json:/etc/rabbitmq/definitions.json:ro,z
+    networks:
+      - bank-net
+    healthcheck:
+      test: ["CMD-SHELL", "rabbitmq-diagnostics -q status || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  customer-service:
+    build:
+      context: ../apps/customer-service
+      dockerfile: Dockerfile
+    container_name: customer-service
+    restart: unless-stopped
+    ports:
+      - "8081:8081"
+    env_file:
+      - ../apps/customer-service/.env
+    environment:
+      DB_HOST: customer-db
+      DB_PORT: 5432
+      DB_DATABASE: bank_customer
+      DB_USERNAME: customer_user
+      DB_PASSWORD: customer_password
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS}
+    depends_on:
+      customer-db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - bank-net
+
+  notification-audit-service:
+    build:
+      context: ../apps/notification-audit-service
+      dockerfile: Dockerfile
+    container_name: notification-audit-service
+    restart: unless-stopped
+    ports:
+      - "8082:8082"
+    env_file:
+      - ../apps/notification-audit-service/.env.example
+    environment:
+      DB_HOST: notification-db
+      DB_PORT: 5432
+      DB_DATABASE: bank_notification
+      DB_USERNAME: notification_user
+      DB_PASSWORD: notification_password
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS}
+    depends_on:
+      notification-db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - bank-net
+
 volumes:
-  customer_data:
-  transaction_data:
-  notification_data:
-  account_data:
-  payment_data:
+  customer_db_data:
+  notification_db_data:
+  account_db_data:
+  payment_db_data:
+  rabbitmq_data:
+  rabbitmq_log:
+
+networks:
+  bank-net:
+    driver: bridge

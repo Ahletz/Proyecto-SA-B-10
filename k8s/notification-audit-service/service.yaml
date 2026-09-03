@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: notification-audit-service
+  labels:
+    app: notification-audit-service
+spec:
+  type: ClusterIP
+  selector:
+    app: notification-audit-service
+  ports:
+    - name: http
+      port: 8082
+      targetPort: 8082

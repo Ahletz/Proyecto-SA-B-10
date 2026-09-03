@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: customer-service-config
+  labels:
+    app: customer-service
+data:
+  SERVER_PORT: "8081"
+  DB_HOST: "customer-postgres"
+  DB_PORT: "5432"
+  DB_DATABASE: "bank_customer"
+  DB_SCHEMA: "public"
+  RABBITMQ_HOST: "rabbitmq"
+  RABBITMQ_PORT: "5672"
+  JWT_EXPIRATION_MS: "3600000"
