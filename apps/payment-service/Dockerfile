@@ -23,6 +23,6 @@ COPY --from=build /app/target/*.jar app.jar
 RUN addgroup -S bankusac && adduser -S bankusac -G bankusac
 USER bankusac
 
-EXPOSE 8082
+EXPOSE 8084
 
 ENTRYPOINT ["java", "-jar", "app.jar"]

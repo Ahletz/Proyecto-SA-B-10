@@ -7,6 +7,6 @@ spec:
     app: payment-service
   ports:
     - protocol: TCP
-      port: 8082
-      targetPort: 8082
+      port: 8084
+      targetPort: 8084
   type: ClusterIP
