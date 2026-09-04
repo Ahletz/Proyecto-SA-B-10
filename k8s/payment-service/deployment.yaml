@@ -1,0 +1,37 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: payment-service
+  labels:
+    app: payment-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: payment-service
+  template:
+    metadata:
+      labels:
+        app: payment-service
+    spec:
+      containers:
+        - name: payment-service
+          image: payment-service:latest
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 8084
+          env:
+            - name: SPRING_DATASOURCE_URL
+              value: "jdbc:postgresql://host.minikube.internal:5437/bank_payment"
+            - name: SPRING_DATASOURCE_USERNAME
+              value: "payment_user"
+            - name: SPRING_DATASOURCE_PASSWORD
+              value: "payment_password"
+            - name: SPRING_RABBITMQ_HOST
+              value: "host.minikube.internal"
+            - name: SPRING_RABBITMQ_PORT
+              value: "5672"
+            - name: SPRING_RABBITMQ_USERNAME
+              value: "bankusac"
+            - name: SPRING_RABBITMQ_PASSWORD
+              value: "bankusac_password"

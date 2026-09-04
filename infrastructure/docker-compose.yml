@@ -39,6 +39,46 @@ services:
     networks:
       - bank-net
 
+  account-db:
+    image: postgres:15
+    container_name: account-db
+    restart: unless-stopped
+    ports:
+      - "5436:5432"
+    environment:
+      POSTGRES_DB: bank_account
+      POSTGRES_USER: account_user
+      POSTGRES_PASSWORD: account_password
+    volumes:
+      - account_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB} -h localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - bank-net
+
+  payment-db:
+    image: postgres:15
+    container_name: payment-db
+    restart: unless-stopped
+    ports:
+      - "5437:5432"
+    environment:
+      POSTGRES_DB: bank_payment
+      POSTGRES_USER: payment_user
+      POSTGRES_PASSWORD: payment_password
+    volumes:
+      - payment_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB} -h localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - bank-net
+
   rabbitmq:
     image: rabbitmq:3.11-management
     container_name: rabbitmq
@@ -122,6 +162,8 @@ services:
 volumes:
   customer_db_data:
   notification_db_data:
+  account_db_data:
+  payment_db_data:
   rabbitmq_data:
   rabbitmq_log:
 
