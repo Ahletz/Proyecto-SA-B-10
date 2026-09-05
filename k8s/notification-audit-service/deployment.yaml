@@ -1,0 +1,33 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: notification-audit-service, namespace: bank-usac }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: notification-audit-service } }
+  template:
+    metadata: { labels: { app: notification-audit-service } }
+    spec:
+      containers:
+        - name: notification-audit-service
+          image: bank-usac/notification-audit-service:local
+          imagePullPolicy: IfNotPresent
+          ports: [{ containerPort: 8082 }]
+          env:
+            - { name: DB_HOST, value: "__HOST_GATEWAY__" }
+            - { name: DB_PORT, value: "5435" }
+            - { name: DB_DATABASE, value: bank_notification }
+            - { name: DB_USERNAME, value: notification_user }
+            - { name: DB_PASSWORD, value: notification_password }
+            - { name: RABBITMQ_HOST, value: rabbitmq }
+            - { name: RABBITMQ_PORT, value: "5672" }
+            - { name: RABBITMQ_DEFAULT_USER, value: rabbit_user }
+            - { name: RABBITMQ_DEFAULT_PASS, value: rabbit_password }
+            - { name: SMTP_HOST, value: mailhog }
+            - { name: SMTP_PORT, value: "1025" }
+            - { name: FRONTEND_URL, value: "http://localhost:30000" }
+          readinessProbe: { httpGet: { path: /actuator/health, port: 8082 }, initialDelaySeconds: 15, periodSeconds: 5 }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: notification-audit-service, namespace: bank-usac }
+spec: { selector: { app: notification-audit-service }, ports: [{ port: 8082, targetPort: 8082 }] }

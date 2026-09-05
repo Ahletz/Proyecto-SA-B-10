@@ -1,0 +1,6 @@
+import {Body,Controller,ForbiddenException,Get,Param,Post,Query,Req} from '@nestjs/common';import {ConfigService} from '@nestjs/config';import {Roles} from '../auth/roles.decorator';import {proxyJson} from './proxy.util';
+@Controller('api/accounts') export class AccountController{constructor(private readonly c:ConfigService){}private base(){return this.c.get('ACCOUNT_SERVICE_URL','http://localhost:3004');}
+ @Post() create(@Req()req:any,@Body()b:any){const customerId=req.user.role==='CLIENT'?req.user.customerId:b.customerId??req.user.customerId;return proxyJson(this.base(),'/api/accounts','POST',{customerId,type:b.type,initialBalance:b.initialBalance??0});}
+ @Get() list(@Req()req:any,@Query('customerId')q?:string){const customerId=req.user.role==='CLIENT'?req.user.customerId:q??req.user.customerId;return proxyJson(this.base(),`/api/accounts?customerId=${encodeURIComponent(customerId)}`,'GET');}
+ @Get(':id') async get(@Req()req:any,@Param('id')id:string){const a=await proxyJson(this.base(),`/api/accounts/${id}`,'GET');if(req.user.role==='CLIENT'&&a.customerId!==req.user.customerId)throw new ForbiddenException('Account does not belong to authenticated customer');return a;}
+ @Roles('ADMIN','CASHIER') @Post('maintenance/deactivate-inactive') deactivate(){return proxyJson(this.base(),'/api/accounts/maintenance/deactivate-inactive','POST',{});}}
