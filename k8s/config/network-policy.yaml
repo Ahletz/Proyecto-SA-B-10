@@ -1,0 +1,12 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: { name: backend-ingress-policy, namespace: bank-usac }
+spec:
+  podSelector:
+    matchExpressions:
+      - { key: app, operator: In, values: [customer-service,account-service,transaction-service,payment-service,notification-audit-service] }
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector: { matchLabels: { app: api-gateway } }
+        - podSelector: { matchLabels: { app: rabbitmq } }
