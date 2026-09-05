@@ -1,78 +1,59 @@
+name: bank-usac
 services:
   customer-db:
-    image: postgres:15
-    container_name: customer-db
-    restart: unless-stopped
-    ports:
-      - "5433:5432"
-    environment:
-      POSTGRES_DB: bank_customer
-      POSTGRES_USER: customer_user
-      POSTGRES_PASSWORD: customer_password
-    volumes:
-      - customer_db_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB} -h localhost"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - bank-net
-
+    image: postgres:17-alpine
+    container_name: bank-customer-db
+    environment: { POSTGRES_DB: bank_customer, POSTGRES_USER: customer_user, POSTGRES_PASSWORD: customer_password }
+    ports: ["5433:5432"]
+    volumes: [customer_db:/var/lib/postgresql/data]
+    healthcheck: { test: ["CMD-SHELL","pg_isready -U customer_user -d bank_customer"], interval: 5s, timeout: 3s, retries: 20 }
+  transaction-db:
+    image: postgres:17-alpine
+    container_name: bank-transaction-db
+    environment: { POSTGRES_DB: bank_transaction, POSTGRES_USER: transaction_user, POSTGRES_PASSWORD: transaction_password }
+    ports: ["5434:5432"]
+    volumes: [transaction_db:/var/lib/postgresql/data]
+    healthcheck: { test: ["CMD-SHELL","pg_isready -U transaction_user -d bank_transaction"], interval: 5s, timeout: 3s, retries: 20 }
   notification-db:
-    image: postgres:15
-    container_name: notification-db
-    restart: unless-stopped
-    ports:
-      - "5435:5432"
-    environment:
-      POSTGRES_DB: bank_notification
-      POSTGRES_USER: notification_user
-      POSTGRES_PASSWORD: notification_password
-    volumes:
-      - notification_db_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB} -h localhost"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - bank-net
+    image: postgres:17-alpine
+    container_name: bank-notification-db
+    environment: { POSTGRES_DB: bank_notification, POSTGRES_USER: notification_user, POSTGRES_PASSWORD: notification_password }
+    ports: ["5435:5432"]
+    volumes: [notification_db:/var/lib/postgresql/data]
+    healthcheck: { test: ["CMD-SHELL","pg_isready -U notification_user -d bank_notification"], interval: 5s, timeout: 3s, retries: 20 }
+  account-db:
+    image: postgres:17-alpine
+    container_name: bank-account-db
+    environment: { POSTGRES_DB: bank_account, POSTGRES_USER: account_user, POSTGRES_PASSWORD: account_password }
+    ports: ["5436:5432"]
+    volumes: [account_db:/var/lib/postgresql/data]
+    healthcheck: { test: ["CMD-SHELL","pg_isready -U account_user -d bank_account"], interval: 5s, timeout: 3s, retries: 20 }
+  payment-db:
+    image: postgres:17-alpine
+    container_name: bank-payment-db
+    environment: { POSTGRES_DB: bank_payment, POSTGRES_USER: payment_user, POSTGRES_PASSWORD: payment_password }
+    ports: ["5437:5432"]
+    volumes: [payment_db:/var/lib/postgresql/data]
+    healthcheck: { test: ["CMD-SHELL","pg_isready -U payment_user -d bank_payment"], interval: 5s, timeout: 3s, retries: 20 }
 
   rabbitmq:
-    image: rabbitmq:3.11-management
-    container_name: rabbitmq
-    restart: unless-stopped
-    ports:
-      - "5672:5672"
-      - "15672:15672"
-    env_file:
-      - ./broker/.env
+    image: rabbitmq:4-management
+    container_name: bank-rabbitmq
     environment:
-      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER}
-      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS}
-    volumes:
-      - rabbitmq_data:/var/lib/rabbitmq
-      - rabbitmq_log:/var/log/rabbitmq
-      - ./broker/rabbitmq/definitions.json:/etc/rabbitmq/definitions.json:ro,z
-    networks:
-      - bank-net
-    healthcheck:
-      test: ["CMD-SHELL", "rabbitmq-diagnostics -q status || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER:-rabbit_user}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS:-rabbit_password}
+    ports: ["5672:5672","15672:15672"]
+    volumes: [rabbitmq_data:/var/lib/rabbitmq]
+    healthcheck: { test: ["CMD","rabbitmq-diagnostics","-q","ping"], interval: 5s, timeout: 5s, retries: 30 }
+
+  mailhog:
+    image: mailhog/mailhog:v1.0.1
+    container_name: bank-mailhog
+    ports: ["1025:1025","8025:8025"]
 
   customer-service:
-    build:
-      context: ../apps/customer-service
-      dockerfile: Dockerfile
-    container_name: customer-service
-    restart: unless-stopped
-    ports:
-      - "8081:8081"
-    env_file:
-      - ../apps/customer-service/.env
+    build: { context: ../apps/customer-service }
+    container_name: bank-customer-service
     environment:
       DB_HOST: customer-db
       DB_PORT: 5432
@@ -81,26 +62,81 @@ services:
       DB_PASSWORD: customer_password
       RABBITMQ_HOST: rabbitmq
       RABBITMQ_PORT: 5672
-      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER}
-      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS}
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER:-rabbit_user}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS:-rabbit_password}
+      JWT_SECRET: ${JWT_SECRET:-bank-usac-demo-secret-change-before-production-2026}
+      SEED_DEMO_USERS: "true"
+      DEMO_ADMIN_PASSWORD: Admin123!
+      DEMO_CASHIER_PASSWORD: Cashier123!
+    expose: ["8081"]
     depends_on:
-      customer-db:
-        condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
-    networks:
-      - bank-net
+      customer-db: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+
+  account-service:
+    build: { context: ../apps/account-service }
+    container_name: bank-account-service
+    environment:
+      PORT: 3004
+      DB_HOST: account-db
+      DB_PORT: 5432
+      DB_DATABASE: bank_account
+      DB_USERNAME: account_user
+      DB_PASSWORD: account_password
+      DB_SYNCHRONIZE: "true"
+      RABBITMQ_URL: amqp://${RABBITMQ_DEFAULT_USER:-rabbit_user}:${RABBITMQ_DEFAULT_PASS:-rabbit_password}@rabbitmq:5672
+      RABBITMQ_QUEUE: account-service.events
+    expose: ["3004"]
+    depends_on:
+      account-db: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+
+  transaction-service:
+    build: { context: ../apps/transaction-service }
+    container_name: bank-transaction-service
+    environment:
+      PORT: 3003
+      DB_HOST: transaction-db
+      DB_PORT: 5432
+      DB_DATABASE: bank_transaction
+      DB_USERNAME: transaction_user
+      DB_PASSWORD: transaction_password
+      DB_SCHEMA: public
+      DB_SYNCHRONIZE: "true"
+      RABBITMQ_URL: amqp://${RABBITMQ_DEFAULT_USER:-rabbit_user}:${RABBITMQ_DEFAULT_PASS:-rabbit_password}@rabbitmq:5672
+      RABBITMQ_EXCHANGE: bank.events
+      RABBITMQ_QUEUE: transaction-service.events
+      RABBITMQ_RETRY_EXCHANGE: bank.events.retry
+      RABBITMQ_DLX: bank.events.dlx
+      RABBITMQ_RETRY_QUEUE: transaction-service.events.retry
+      RABBITMQ_DLQ: transaction-service.events.dlq
+    expose: ["3003"]
+    depends_on:
+      transaction-db: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+
+  payment-service:
+    build: { context: ../apps/payment-service }
+    container_name: bank-payment-service
+    environment:
+      PORT: 3005
+      DB_HOST: payment-db
+      DB_PORT: 5432
+      DB_DATABASE: bank_payment
+      DB_USERNAME: payment_user
+      DB_PASSWORD: payment_password
+      DB_SYNCHRONIZE: "true"
+      RABBITMQ_URL: amqp://${RABBITMQ_DEFAULT_USER:-rabbit_user}:${RABBITMQ_DEFAULT_PASS:-rabbit_password}@rabbitmq:5672
+      RABBITMQ_QUEUE: payment-service.events
+      PAYMENT_MAX_AMOUNT: 1000000
+    expose: ["3005"]
+    depends_on:
+      payment-db: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
 
   notification-audit-service:
-    build:
-      context: ../apps/notification-audit-service
-      dockerfile: Dockerfile
-    container_name: notification-audit-service
-    restart: unless-stopped
-    ports:
-      - "8082:8082"
-    env_file:
-      - ../apps/notification-audit-service/.env.example
+    build: { context: ../apps/notification-audit-service }
+    container_name: bank-notification-audit-service
     environment:
       DB_HOST: notification-db
       DB_PORT: 5432
@@ -109,22 +145,53 @@ services:
       DB_PASSWORD: notification_password
       RABBITMQ_HOST: rabbitmq
       RABBITMQ_PORT: 5672
-      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER}
-      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS}
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER:-rabbit_user}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS:-rabbit_password}
+      SMTP_HOST: mailhog
+      SMTP_PORT: 1025
+      SMTP_FROM: no-reply@bankusac.local
+      FRONTEND_URL: http://localhost:3000
+    expose: ["8082"]
     depends_on:
-      notification-db:
-        condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
-    networks:
-      - bank-net
+      notification-db: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+      mailhog: { condition: service_started }
+
+  api-gateway:
+    build: { context: ../apps/api-gateway }
+    container_name: bank-api-gateway
+    environment:
+      PORT: 8080
+      JWT_SECRET: ${JWT_SECRET:-bank-usac-demo-secret-change-before-production-2026}
+      RABBITMQ_URL: amqp://${RABBITMQ_DEFAULT_USER:-rabbit_user}:${RABBITMQ_DEFAULT_PASS:-rabbit_password}@rabbitmq:5672
+      CUSTOMER_SERVICE_URL: http://customer-service:8081
+      ACCOUNT_SERVICE_URL: http://account-service:3004
+      TRANSACTION_SERVICE_URL: http://transaction-service:3003
+      PAYMENT_SERVICE_URL: http://payment-service:3005
+      NOTIFICATION_SERVICE_URL: http://notification-audit-service:8082
+    ports: ["8080:8080"]
+    depends_on:
+      rabbitmq: { condition: service_healthy }
+      customer-service: { condition: service_started }
+      account-service: { condition: service_started }
+      transaction-service: { condition: service_started }
+      payment-service: { condition: service_started }
+      notification-audit-service: { condition: service_started }
+
+  frontend:
+    build:
+      context: ../apps/frontend
+      args:
+        VITE_API_BASE_URL: http://localhost:8080
+    container_name: bank-frontend
+    ports: ["3000:3000"]
+    depends_on:
+      api-gateway: { condition: service_started }
 
 volumes:
-  customer_db_data:
-  notification_db_data:
-  rabbitmq_data:
-  rabbitmq_log:
-
-networks:
-  bank-net:
-    driver: bridge
+  customer_db: {}
+  account_db: {}
+  transaction_db: {}
+  payment_db: {}
+  notification_db: {}
+  rabbitmq_data: {}

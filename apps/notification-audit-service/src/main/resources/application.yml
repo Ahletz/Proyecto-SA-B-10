@@ -7,33 +7,22 @@ spring:
     hibernate:
       ddl-auto: update
     show-sql: false
-    properties:
-      hibernate:
-        dialect: org.hibernate.dialect.PostgreSQLDialect
-
   rabbitmq:
     host: ${RABBITMQ_HOST:localhost}
     port: ${RABBITMQ_PORT:5672}
     username: ${RABBITMQ_DEFAULT_USER:rabbit_user}
     password: ${RABBITMQ_DEFAULT_PASS:rabbit_password}
-    listener:
-      simple:
-        default-requeue-rejected: false
-        retry:
-          enabled: true
-          max-attempts: 3
-          initial-interval: 1s
-          multiplier: 2
-          max-interval: 10s
-
+  mail:
+    host: ${SMTP_HOST:localhost}
+    port: ${SMTP_PORT:1025}
+    username: ${SMTP_FROM:no-reply@bankusac.local}
+    password: ""
+    properties:
+      mail.smtp.auth: false
+      mail.smtp.starttls.enable: false
 server:
   port: 8082
-
 management:
-  endpoints:
-    web:
-      exposure:
-        include: health,info,metrics
-  endpoint:
-    health:
-      show-details: always
+  endpoints.web.exposure.include: health,info,metrics
+bank:
+  frontend-url: ${FRONTEND_URL:http://localhost:3000}

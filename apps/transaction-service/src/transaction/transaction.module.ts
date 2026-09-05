@@ -14,6 +14,8 @@ import { EventIdempotencyService } from './infrastructure/messaging/event-idempo
 import { ProcessedEventOrmEntity } from './infrastructure/messaging/processed-event.orm-entity';
 
 import { TransactionEventsConsumer } from './presentation/consumers/transaction-events.consumer';
+import { TransactionQueryController } from './presentation/controllers/transaction-query.controller';
+
 
 @Module({
   imports: [
@@ -22,6 +24,8 @@ import { TransactionEventsConsumer } from './presentation/consumers/transaction-
       ProcessedEventOrmEntity,
     ]),
   ],
+
+  controllers: [TransactionQueryController],
 
   providers: [
     CreateTransactionService,

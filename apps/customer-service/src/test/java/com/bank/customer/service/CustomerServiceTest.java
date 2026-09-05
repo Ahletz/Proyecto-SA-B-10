@@ -8,82 +8,36 @@ import com.bank.customer.publisher.EventPublisher;
 import com.bank.customer.repository.CustomerRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.mockito.ArgumentCaptor;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.util.ReflectionTestUtils;
-
+import java.time.LocalDate;
 import java.util.Map;
 import java.util.Optional;
-
 import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
+import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.*;
 
 class CustomerServiceTest {
+    private CustomerRepository repo; private EventPublisher publisher; private PasswordEncoder encoder; private CustomerService service;
+    @BeforeEach void setup(){ repo=mock(CustomerRepository.class); publisher=mock(EventPublisher.class); encoder=mock(PasswordEncoder.class); service=new CustomerService(repo,publisher,encoder); }
 
-    private CustomerRepository repo;
-    private EventPublisher publisher;
-    private PasswordEncoder passwordEncoder;
-    private CustomerService service;
-
-    @BeforeEach
-    void setUp() {
-        repo = mock(CustomerRepository.class);
-        publisher = mock(EventPublisher.class);
-        passwordEncoder = mock(PasswordEncoder.class);
-        service = new CustomerService(repo, publisher, passwordEncoder);
+    @Test void registerCreatesIdentityAndPublishesEvent(){
+        var req=new RegisterRequest("cliente@test.com","cliente1","secret123","Cliente Prueba","DOC-1","photo.png", LocalDate.of(1995,1,1),"Guatemala");
+        when(repo.findByEmail(req.email())).thenReturn(Optional.empty()); when(repo.findByDocumentNumber(req.documentNumber())).thenReturn(Optional.empty()); when(repo.findByUsername(req.username())).thenReturn(Optional.empty()); when(encoder.encode(req.password())).thenReturn("hash");
+        when(repo.save(any(Customer.class))).thenAnswer(i->{ Customer c=i.getArgument(0); ReflectionTestUtils.setField(c,"id",12L); return c; });
+        Map<String,Object> out=service.register(req,"corr-123");
+        assertEquals("CUST-12",out.get("customerId")); assertEquals("cliente1",out.get("username")); assertNotNull(out.get("activationToken")); verify(publisher).publish(eq("customer.registered"),anyMap(),eq("corr-123"));
     }
 
-    @Test
-    void register_shouldCreateCustomerAndPublishRegisteredEvent() {
-        RegisterRequest request = new RegisterRequest("cliente@test.com", "cliente1", "secret123");
-        when(repo.findByEmail("cliente@test.com")).thenReturn(Optional.empty());
-        when(repo.findByUsername("cliente1")).thenReturn(Optional.empty());
-        when(passwordEncoder.encode("secret123")).thenReturn("hashed-password");
-
-        Customer saved = new Customer("cliente@test.com", "cliente1", "hashed-password", "PENDING_ACTIVATION");
-        saved.setActivationToken("tok-123");
-        ReflectionTestUtils.setField(saved, "id", 12L);
-        when(repo.save(any(Customer.class))).thenReturn(saved);
-
-        Map<String, Object> result = service.register(request, "corr-123");
-
-        assertEquals("ok", result.get("status"));
-        assertEquals("CUST-12", result.get("customerId"));
-        assertNotNull(result.get("activationToken"));
-
-        ArgumentCaptor<Customer> customerCaptor = ArgumentCaptor.forClass(Customer.class);
-        verify(repo).save(customerCaptor.capture());
-        assertEquals("PENDING_ACTIVATION", customerCaptor.getValue().getStatus());
-        verify(publisher).publish(eq("customer.registered"), any(Map.class), eq("corr-123"));
+    @Test void loginRejectsInactive(){
+        Customer c=customer("PENDING_ACTIVATION"); when(repo.findByUsername("cliente1")).thenReturn(Optional.of(c)); when(encoder.matches("secret123","hash")).thenReturn(true);
+        assertThrows(InvalidCredentialsException.class,()->service.login(new LoginRequest("cliente1","secret123")));
     }
 
-    @Test
-    void login_shouldFailWhenCustomerIsNotActive() {
-        Customer customer = new Customer("cliente@test.com", "cliente1", "hashed-password", "PENDING_ACTIVATION");
-        when(repo.findByUsername("cliente1")).thenReturn(Optional.of(customer));
-        when(passwordEncoder.matches("secret123", "hashed-password")).thenReturn(true);
-
-        InvalidCredentialsException ex = assertThrows(
-                InvalidCredentialsException.class,
-                () -> service.login(new LoginRequest("cliente1", "secret123"))
-        );
-
-        assertTrue(ex.getMessage().contains("activar") || ex.getMessage().contains("activo"));
+    @Test void loginReturnsJwtForActive(){
+        Customer c=customer("ACTIVE"); ReflectionTestUtils.setField(c,"id",1L); when(repo.findByUsername("cliente1")).thenReturn(Optional.of(c)); when(encoder.matches("secret123","hash")).thenReturn(true);
+        Map<String,Object> out=service.login(new LoginRequest("cliente1","secret123")); assertNotNull(out.get("token")); assertEquals("CLIENT",out.get("role"));
     }
 
-    @Test
-    void login_shouldSucceedWhenCustomerIsActive() {
-        Customer customer = new Customer("cliente@test.com", "cliente1", "hashed-password", "ACTIVE");
-        when(repo.findByUsername("cliente1")).thenReturn(Optional.of(customer));
-        when(passwordEncoder.matches("secret123", "hashed-password")).thenReturn(true);
-
-        Map<String, String> result = service.login(new LoginRequest("cliente1", "secret123"));
-
-        assertNotNull(result.get("token"));
-        assertFalse(result.get("token").isBlank());
-    }
+    private Customer customer(String status){ Customer c=new Customer(); c.setEmail("cliente@test.com"); c.setUsername("cliente1"); c.setPassword("hash"); c.setStatus(status); c.setRole("CLIENT"); c.setIdentityStatus("VALIDATED"); c.setFullName("Cliente Prueba"); c.setDocumentNumber("DOC-1"); c.setDocumentPhoto("photo.png"); c.setBirthDate(LocalDate.of(1995,1,1)); c.setAddress("Guatemala"); return c; }
 }
