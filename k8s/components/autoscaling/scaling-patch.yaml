@@ -1,0 +1,13 @@
+# El HPA administra las réplicas, por eso se quita spec.replicas del Deployment.
+- op: remove
+  path: /spec/replicas
+- op: add
+  path: /spec/strategy
+  value:
+    type: RollingUpdate
+    rollingUpdate: { maxUnavailable: 0, maxSurge: 1 }
+- op: add
+  path: /spec/template/spec/containers/0/resources
+  value:
+    requests: { cpu: 100m }
+    limits: { cpu: 500m }

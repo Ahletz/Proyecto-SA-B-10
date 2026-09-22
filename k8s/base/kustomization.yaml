@@ -1,0 +1,14 @@
+# Base común: los mismos manifiestos que aplica scripts/project/start-k8s.sh (kind local).
+# Los ambientes dev/prod la reutilizan desde k8s/overlays/<ambiente>.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../config
+  - ../broker
+  - ../customer-service
+  - ../account-service
+  - ../transaction-service
+  - ../payment-service
+  - ../notification-audit-service
+  - ../api-gateway
+  - ../frontend

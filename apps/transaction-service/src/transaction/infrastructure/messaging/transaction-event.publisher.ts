@@ -4,6 +4,10 @@ import { randomUUID } from 'crypto';
 import { BankEvent } from '../../../common/events/bank-event.interface';
 import { Transaction } from '../../domain/entities/transaction.entity';
 import { TransactionStatus } from '../../domain/enums/transaction-status.enum';
+import {
+  PublicTransactionStatus,
+  toPublicStatus,
+} from '../../domain/enums/public-transaction-status.enum';
 import { RabbitMqService } from './rabbitmq.service';
 
 interface TransactionCreatedPayload {
@@ -12,6 +16,14 @@ interface TransactionCreatedPayload {
   targetAccount: string;
   amount: number;
   status: TransactionStatus;
+}
+
+// Contrato Fase 2 (sección 2.2): lo consume Notification & Audit.
+interface TransactionStatusChangedPayload {
+  transactionId: string;
+  accountId: string;
+  estado: PublicTransactionStatus;
+  fecha: string;
 }
 
 interface TransactionResultPayload {
@@ -51,6 +63,8 @@ export class TransactionEventPublisher {
       event.eventType,
       event,
     );
+
+    await this.publishStatusChanged(transaction);
   }
 
   async publishTransactionCompleted(
@@ -72,6 +86,8 @@ export class TransactionEventPublisher {
       event.eventType,
       event,
     );
+
+    await this.publishStatusChanged(transaction);
   }
 
   async publishTransactionFailed(
@@ -95,6 +111,8 @@ export class TransactionEventPublisher {
       event.eventType,
       event,
     );
+
+    await this.publishStatusChanged(transaction);
   }
 
   async publishTransactionCompensated(
@@ -109,6 +127,37 @@ export class TransactionEventPublisher {
             transaction.transactionId,
           status:
             transaction.status,
+        },
+      );
+
+    await this.rabbitMqService.publish(
+      event.eventType,
+      event,
+    );
+
+    await this.publishStatusChanged(transaction);
+  }
+
+  /**
+   * Se publica junto con cada evento de la Saga que cambia el
+   * estado público (PENDING, APPROVED o FAILED) de la transacción.
+   */
+  private async publishStatusChanged(
+    transaction: Transaction,
+  ): Promise<void> {
+    const event: BankEvent<TransactionStatusChangedPayload> =
+      this.createEvent(
+        'transaction.status.changed',
+        transaction,
+        {
+          transactionId:
+            transaction.transactionId,
+          accountId:
+            transaction.sourceAccount,
+          estado:
+            toPublicStatus(transaction.status),
+          fecha:
+            transaction.updatedAt.toISOString(),
         },
       );
 

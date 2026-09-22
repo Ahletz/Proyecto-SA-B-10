@@ -3,6 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 
 import { CreateTransactionService } from './application/services/create-transaction.service';
 import { UpdateTransactionStateService } from './application/services/update-transaction-state.service';
+import { GetTransactionHistoryService } from './application/services/get-transaction-history.service';
 import { TransactionRepository } from './application/ports/transaction.repository';
 
 import { TransactionOrmEntity } from './infrastructure/persistence/transaction.orm-entity';
@@ -30,6 +31,7 @@ import { TransactionQueryController } from './presentation/controllers/transacti
   providers: [
     CreateTransactionService,
     UpdateTransactionStateService,
+    GetTransactionHistoryService,
 
     RabbitMqService,
     TransactionEventPublisher,

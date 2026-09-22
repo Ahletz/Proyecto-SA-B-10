@@ -1,0 +1,67 @@
+name: Integrante 3 CI
+
+on:
+  push:
+    branches:
+      - 'feature/**'
+    paths:
+      - 'apps/transaction-service/**'
+      - 'apps/api-gateway/**'
+      - 'k8s/**'
+      - '.github/workflows/integrante3-ci.yml'
+      - '.github/workflows/reusable-node-ci.yml'
+
+  pull_request:
+    branches:
+      - develop
+    paths:
+      - 'apps/transaction-service/**'
+      - 'apps/api-gateway/**'
+      - 'k8s/**'
+      - '.github/workflows/integrante3-ci.yml'
+      - '.github/workflows/reusable-node-ci.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: integrante3-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  transaction-service:
+    name: Transaction - Build and Test
+    uses: ./.github/workflows/reusable-node-ci.yml
+    with:
+      service: transaction-service
+      lint: true
+
+  api-gateway:
+    name: API Gateway - Build and Test
+    uses: ./.github/workflows/reusable-node-ci.yml
+    with:
+      service: api-gateway
+
+  k8s-manifests:
+    name: Kubernetes - Validate manifests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Render dev overlay
+        run: kubectl kustomize k8s/overlays/dev > rendered-dev.yaml
+
+      - name: Validate schemas (kubeconform)
+        run: |
+          docker run --rm -i ghcr.io/yannh/kubeconform:v0.7.0 \
+            -strict -summary - < rendered-dev.yaml
+
+      - name: Reject mutable image tags
+        run: |
+          if grep -nE 'image: .*:latest\b' rendered-dev.yaml; then
+            echo "::error::No se permiten imágenes con tag latest"
+            exit 1
+          fi

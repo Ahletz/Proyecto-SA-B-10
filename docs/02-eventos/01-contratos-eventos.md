@@ -41,6 +41,17 @@
 | `transaction.completed` | Transaction | Notification/Audit | estado terminal exitoso |
 | `transaction.failed` | Transaction | Notification/Audit | estado terminal fallido |
 | `transaction.compensated` | Transaction | Notification/Audit | estado terminal compensado |
+| `transaction.status.changed` | Transaction | Notification/Audit | cambio del estado público (Fase 2) |
+
+### `transaction.status.changed` (Fase 2)
+Se publica junto con `transaction.created`, `transaction.completed`, `transaction.failed` y `transaction.compensated`, es decir, cada vez que cambia el estado público de la transacción.
+
+| Campo del payload | Descripción |
+|---|---|
+| `transactionId` | identificador de la transacción |
+| `accountId` | cuenta origen de la transferencia |
+| `estado` | `PENDING`, `APPROVED` o `FAILED` (ver mapeo en la referencia API del historial) |
+| `fecha` | fecha ISO-8601 del cambio de estado |
 
 ## Invariantes de contrato
 - los eventos persistentes se publican en `bank.events`;

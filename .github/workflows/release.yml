@@ -1,0 +1,111 @@
+name: Release
+
+# Rama release/X.Y.Z: crea el tag vX.Y.Z y publica en GHCR las imágenes finales
+# con ese tag (inmutables, nunca `latest`). El despliegue a producción al hacer
+# merge a main usará exactamente estas imágenes.
+#
+# Si hace falta un fix después de publicar, se abre release/X.Y.(Z+1): un tag
+# ya publicado no se reescribe.
+
+on:
+  push:
+    branches:
+      - 'release/**'
+
+permissions:
+  contents: write
+  packages: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  version:
+    name: Resolve version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+      prefix: ${{ steps.v.outputs.prefix }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Validate release branch and tag
+        id: v
+        run: |
+          VERSION="${GITHUB_REF_NAME#release/}"
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::La rama debe llamarse release/X.Y.Z (recibido: $GITHUB_REF_NAME)"
+            exit 1
+          fi
+          if git ls-remote --exit-code --tags origin "refs/tags/v$VERSION" >/dev/null; then
+            echo "::error::El tag v$VERSION ya existe. Abre release/<siguiente versión> para publicar cambios nuevos."
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "prefix=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/bank-usac" >> "$GITHUB_OUTPUT"
+
+  images:
+    name: Publish image - ${{ matrix.service }}
+    needs: version
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    strategy:
+      fail-fast: true
+      matrix:
+        service:
+          - customer-service
+          - account-service
+          - transaction-service
+          - payment-service
+          - notification-audit-service
+          - api-gateway
+          - frontend
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: apps/${{ matrix.service }}
+          push: true
+          tags: ${{ needs.version.outputs.prefix }}/${{ matrix.service }}:v${{ needs.version.outputs.version }}
+          # URL pública del Gateway en producción (variable del repositorio, se define cuando exista la infraestructura).
+          build-args: |
+            VITE_API_BASE_URL=${{ vars.PROD_API_BASE_URL || 'http://localhost:8080' }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.version=v${{ needs.version.outputs.version }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          cache-from: type=gha,scope=${{ matrix.service }}
+
+  tag:
+    name: Create tag v${{ needs.version.outputs.version }}
+    needs: [version, images]
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Push tag
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "v${{ needs.version.outputs.version }}" -m "Release v${{ needs.version.outputs.version }}"
+          git push origin "v${{ needs.version.outputs.version }}"

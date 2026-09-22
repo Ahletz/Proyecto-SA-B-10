@@ -43,6 +43,23 @@ Respuesta de aceptación:
 {"accepted":true,"correlationId":"uuid","eventId":"uuid","status":"PENDING"}
 ```
 
+## Historial de transacciones
+| Método | Ruta | Acceso | Descripción |
+|---|---|---|---|
+| GET | `/api/transactions?accountId=` | autenticado (CLIENT solo sus cuentas) | historial de la cuenta como origen o destino, más reciente primero |
+
+Filtros opcionales:
+- `from`, `to`: fechas ISO-8601, rango inclusivo sobre la fecha de creación;
+- `status`: `PENDING`, `APPROVED` o `FAILED`;
+- `page` (desde 1, por defecto 1) y `size` (1–100, por defecto 20).
+
+Respuesta:
+```json
+{"items":[{"transactionId":"uuid","sourceAccount":"uuid","targetAccount":"uuid","direction":"OUTGOING","amount":250,"status":"APPROVED","detailedStatus":"COMPLETED","correlationId":"uuid","createdAt":"ISO-8601","updatedAt":"ISO-8601"}],"page":1,"size":20,"total":1}
+```
+
+`status` es el estado del contrato de Fase 2. `detailedStatus` es el estado interno de la Saga: `PENDING`, `PROCESSING` y `COMPENSATING` se exponen como `PENDING`; `COMPLETED` como `APPROVED`; `FAILED` y `COMPENSATED` como `FAILED`. `direction` indica si la cuenta consultada envió (`OUTGOING`) o recibió (`INCOMING`) el dinero.
+
 ## Administración
 | Método | Ruta | Acceso |
 |---|---|---|
