@@ -1,8 +1,8 @@
 spring:
   datasource:
-    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5433}/${DB_DATABASE:bank_customer}
-    username: ${DB_USERNAME:customer_user}
-    password: ${DB_PASSWORD:customer_password}
+    url: jdbc:postgresql://${CUSTOMER_DB_HOST:${DB_HOST:localhost}}:${CUSTOMER_DB_PORT:${DB_PORT:5433}}/${CUSTOMER_DB_NAME:${DB_DATABASE:bank_customer}}
+    username: ${CUSTOMER_DB_USER:${DB_USERNAME:customer_user}}
+    password: ${CUSTOMER_DB_PASSWORD:${DB_PASSWORD:customer_password}}
   jpa:
     hibernate:
       ddl-auto: update
