@@ -32,4 +32,15 @@ public class CustomerController {
         @RequestHeader(value="X-Correlation-Id", required=false) String correlationId) {
         return ResponseEntity.ok(service.updateCustomer(auth.getName(), req, correlationId));
     }
+
+    @PatchMapping("/{customerId}/kyc")
+    public ResponseEntity<?> updateKycStatus(
+        @PathVariable String customerId,
+        @RequestBody @Valid UpdateKycStatusRequest req,
+        @RequestHeader(value="X-Correlation-Id", required=false) String correlationId) {
+
+        return ResponseEntity.ok(
+            service.updateKycStatus(customerId, req, correlationId)
+        );
+    }
 }

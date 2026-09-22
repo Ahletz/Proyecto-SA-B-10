@@ -1,6 +1,7 @@
 package com.bank.customer.config;
 
 import com.bank.customer.model.Customer;
+import com.bank.customer.model.KycStatus;
 import com.bank.customer.repository.CustomerRepository;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.context.annotation.Bean;
@@ -21,7 +22,7 @@ public class DemoUsersConfig {
     }
     private void createIfMissing(CustomerRepository repo, PasswordEncoder encoder, String username, String email, String password, String role, String document, String name) {
         if(repo.findByUsername(username).isPresent()) return;
-        Customer c=new Customer(); c.setUsername(username); c.setEmail(email); c.setPassword(encoder.encode(password)); c.setStatus("ACTIVE"); c.setRole(role); c.setIdentityStatus("VALIDATED");
+        Customer c=new Customer(); c.setUsername(username); c.setEmail(email); c.setPassword(encoder.encode(password)); c.setStatus("ACTIVE"); c.setRole(role); c.setIdentityStatus("VALIDATED"); c.setKycStatus(KycStatus.VERIFIED);
         c.setFullName(name); c.setDocumentNumber(document); c.setDocumentPhoto("demo-seeded-user.png"); c.setBirthDate(LocalDate.of(1990,1,1)); c.setAddress("Ciudad de Guatemala");
         repo.save(c);
     }

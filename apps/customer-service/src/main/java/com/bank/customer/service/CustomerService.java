@@ -3,6 +3,7 @@ package com.bank.customer.service;
 import com.bank.customer.dto.*;
 import com.bank.customer.exception.*;
 import com.bank.customer.model.Customer;
+import com.bank.customer.model.KycStatus;
 import com.bank.customer.publisher.EventPublisher;
 import com.bank.customer.repository.CustomerRepository;
 import com.bank.customer.util.JwtUtil;
@@ -45,6 +46,7 @@ public class CustomerService {
         c.setStatus("PENDING_ACTIVATION");
         c.setRole("CLIENT");
         c.setIdentityStatus("VALIDATED");
+        c.setKycStatus(KycStatus.PENDING);
         c.setFullName(req.fullName().trim());
         c.setDocumentNumber(req.documentNumber().trim());
         c.setDocumentPhoto(req.documentPhoto());
@@ -100,12 +102,87 @@ public class CustomerService {
         return toResponse(c);
     }
 
+    @Transactional
+    public Map<String,Object> updateKycStatus(
+            String customerId,
+            UpdateKycStatusRequest req,
+            String correlationId) {
+
+        Customer customer = findByExternalCustomerId(customerId);
+
+        KycStatus newStatus;
+
+        try {
+            newStatus = KycStatus.valueOf(
+                req.status().trim().toUpperCase(Locale.ROOT)
+            );
+        } catch (IllegalArgumentException ex) {
+            throw new ValidationException(
+                "Estado KYC inválido. Valores permitidos: PENDING, VERIFIED, REJECTED"
+            );
+        }
+
+        KycStatus previousStatus = customer.getKycStatus();
+
+        /*
+         * La operación es idempotente:
+         * solicitar nuevamente el mismo estado no genera
+         * otra modificación ni un evento duplicado.
+         */
+        if (previousStatus == newStatus) {
+            return toResponse(customer);
+        }
+
+        customer.setKycStatus(newStatus);
+        repo.save(customer);
+
+        String effectiveCorrelationId =
+            correlationId == null || correlationId.isBlank()
+                ? UUID.randomUUID().toString()
+                : correlationId;
+
+        Map<String,Object> payload = new LinkedHashMap<>();
+        payload.put("customerId", "CUST-" + customer.getId());
+        payload.put(
+            "estadoAnterior",
+            previousStatus == null ? KycStatus.PENDING.name() : previousStatus.name()
+        );
+        payload.put("estadoNuevo", newStatus.name());
+
+        publisher.publish(
+            "customer.kyc.status.changed",
+            payload,
+            effectiveCorrelationId
+        );
+
+        return toResponse(customer);
+    }
+
+    private Customer findByExternalCustomerId(String customerId) {
+        if (customerId == null || !customerId.matches("CUST-\\d+")) {
+            throw new ValidationException(
+                "Formato de customerId inválido. Se esperaba CUST-<id>"
+            );
+        }
+
+        Long id;
+
+        try {
+            id = Long.valueOf(customerId.substring(5));
+        } catch (NumberFormatException ex) {
+            throw new ValidationException("customerId inválido");
+        }
+
+        return repo.findById(id)
+            .orElseThrow(() -> new ValidationException("Cliente no encontrado"));
+    }
+
     private Customer find(String username) { return repo.findByUsername(username).orElseThrow(() -> new ValidationException("Cliente no encontrado")); }
     private Map<String,Object> toResponse(Customer c) {
         Map<String,Object> r = new LinkedHashMap<>();
         r.put("customerId", "CUST-" + c.getId()); r.put("username", c.getUsername()); r.put("email", c.getEmail());
         r.put("fullName", c.getFullName()); r.put("documentNumber", c.getDocumentNumber()); r.put("documentPhoto", c.getDocumentPhoto());
-        r.put("birthDate", c.getBirthDate()); r.put("address", c.getAddress()); r.put("role", c.getRole()); r.put("identityStatus", c.getIdentityStatus()); r.put("status", c.getStatus()); r.put("registeredAt", c.getCreatedAt());
+        r.put("birthDate", c.getBirthDate()); r.put("address", c.getAddress()); r.put("role", c.getRole()); r.put("identityStatus", c.getIdentityStatus()); r.put("kycStatus", c.getKycStatus()); r.put("status", c.getStatus()); r.put("registeredAt", c.getCreatedAt());
         return r;
     }
     private String generateUniqueUsername(String fullName) {
