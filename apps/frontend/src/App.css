@@ -203,3 +203,86 @@
     margin-left:0;
   }
 }
+
+.history-filters{
+  display:grid;
+  grid-template-columns:minmax(220px,2fr) repeat(3,minmax(140px,1fr)) auto;
+  gap:14px;
+  align-items:end;
+}
+
+.history-filters label{
+  display:grid;
+  gap:6px;
+  font-weight:600;
+}
+
+.history-table td{
+  vertical-align:middle;
+}
+
+.amount{
+  font-weight:700;
+  white-space:nowrap;
+}
+
+.amount-outgoing{
+  color:#b42318;
+}
+
+.amount-incoming{
+  color:#067647;
+}
+
+.tx-status{
+  display:inline-block;
+  padding:4px 8px;
+  border-radius:999px;
+  font-size:12px;
+  font-weight:700;
+}
+
+.tx-status-pending{
+  background:#fff7e6;
+  color:#8a4b08;
+}
+
+.tx-status-approved{
+  background:#ecfdf3;
+  color:#067647;
+}
+
+.tx-status-failed{
+  background:#fef3f2;
+  color:#b42318;
+}
+
+.pagination{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:12px;
+  margin-top:14px;
+}
+
+.pagination button:disabled{
+  opacity:.5;
+  cursor:not-allowed;
+}
+
+@media(max-width:900px){
+  .history-filters{
+    grid-template-columns:1fr 1fr;
+  }
+}
+
+@media(max-width:700px){
+  .history-filters{
+    grid-template-columns:1fr;
+  }
+
+  .history-table{
+    display:block;
+    overflow-x:auto;
+  }
+}

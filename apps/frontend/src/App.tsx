@@ -11,6 +11,7 @@ import{ActivationPage}from'./pages/ActivationPage';
 import{ProfilePage}from'./pages/ProfilePage';
 import{AccountsPage}from'./pages/AccountsPage';
 import{TransferPage}from'./pages/TransferPage';
+import{TransactionHistoryPage}from'./pages/TransactionHistoryPage';
 import{AuditPage}from'./pages/AuditPage';
 import{PaymentsPage}from'./pages/PaymentsPage';
 import{NotificationsPage}from'./pages/NotificationsPage';
@@ -64,6 +65,15 @@ export const App=()=>(
         element={
           <ProtectedRoute>
             <TransferPage/>
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/transactions"
+        element={
+          <ProtectedRoute>
+            <TransactionHistoryPage/>
           </ProtectedRoute>
         }
       />
