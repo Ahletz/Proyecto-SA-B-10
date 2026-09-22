@@ -71,16 +71,41 @@ export const useAuthStore=create<State>((set)=>({
   },
 
   loadMe:async()=>{
-    if(!localStorage.getItem('token')){
+    const token=localStorage.getItem('token');
+
+    if(!token){
+      set({
+        customer:null,
+        token:null,
+        loading:false
+      });
       return;
     }
 
+    set({
+      loading:true,
+      error:null
+    });
+
     try{
+      const customer=await api('/api/customers/me');
+
       set({
-        customer:await api('/api/customers/me')
+        customer,
+        token,
+        loading:false
       });
-    }catch{
-      // La sesión existente puede haber expirado.
+    }catch(e){
+      localStorage.removeItem('token');
+
+      set({
+        customer:null,
+        token:null,
+        loading:false,
+        error:e instanceof Error
+          ?e.message
+          :String(e)
+      });
     }
   },
 
