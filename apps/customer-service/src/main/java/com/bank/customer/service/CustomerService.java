@@ -62,6 +62,7 @@ public class CustomerService {
         payload.put("fullName", c.getFullName());
         payload.put("role", c.getRole());
         payload.put("identityStatus", c.getIdentityStatus());
+        payload.put("kycStatus", c.getKycStatus().name());
         payload.put("status", c.getStatus());
         payload.put("activationToken", c.getActivationToken());
         publisher.publish("customer.registered", payload, correlationId);

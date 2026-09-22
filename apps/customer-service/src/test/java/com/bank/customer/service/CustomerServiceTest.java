@@ -101,7 +101,10 @@ class CustomerServiceTest {
 
         verify(publisher).publish(
             eq("customer.registered"),
-            anyMap(),
+            argThat(payload ->
+                "CUST-12".equals(payload.get("customerId"))
+                && "PENDING".equals(payload.get("kycStatus"))
+            ),
             eq("corr-123")
         );
     }
