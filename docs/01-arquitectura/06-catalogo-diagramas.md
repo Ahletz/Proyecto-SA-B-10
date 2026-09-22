@@ -35,3 +35,12 @@ Todos los PNG están en `docs/assets/diagramas/`. Los editables correspondientes
 ![Eventos](../assets/diagramas/event-topology.png)
 
 ![Deployment](../assets/diagramas/uml-deployment.png)
+
+## Actualización Fase 2 — Integrante 1
+
+La documentación detallada de los diagramas actualizados se encuentra en:
+
+- [C4 Nivel 1 — Contexto Fase 2](07-c4-contexto-fase2.md)
+- [C4 Nivel 3 — Customer y Notification & Audit](08-c4-componentes-integrante1-fase2.md)
+
+Las fuentes Mermaid reproducibles se conservan en `c4-src/`.

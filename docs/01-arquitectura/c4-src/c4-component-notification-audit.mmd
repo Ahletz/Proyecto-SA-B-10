@@ -1,0 +1,42 @@
+flowchart LR
+    rabbitIn["RabbitMQ\nbank.events"]
+    rabbitOut["RabbitMQ\nbank.events"]
+    gateway["API Gateway"]
+    smtp["SMTP / MailHog"]
+
+    subgraph notification["Notification & Audit Service — Spring Boot"]
+        listener["CustomerEventListener\nSubscriber / Event Handler"]
+
+        classifier["EventClassificationService\nINFO · WARNING · ERROR"]
+
+        notificationService["NotificationService\nGeneración de notificaciones"]
+
+        publisher["NotificationEventPublisher\nPublisher RabbitMQ"]
+
+        repository["ProcessedEventRepository\nPersistencia / Idempotencia"]
+
+        controller["AuditController\nREST historial"]
+
+        model["ProcessedEvent\nNotificationSeverity"]
+
+        listener --> classifier
+        listener --> notificationService
+        listener --> repository
+        listener --> publisher
+        listener --> model
+
+        controller --> repository
+        repository --> model
+    end
+
+    db[("PostgreSQL\nbank_notification")]
+
+    rabbitIn -->|"customer.#\ntransaction.#\naccount.#\npayment.#"| listener
+
+    repository -->|"JPA"| db
+
+    notificationService -->|"SMTP"| smtp
+
+    publisher -->|"notification.classified"| rabbitOut
+
+    gateway -->|"GET /api/audit/events"| controller

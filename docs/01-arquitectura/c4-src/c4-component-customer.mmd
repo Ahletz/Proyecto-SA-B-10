@@ -1,0 +1,32 @@
+flowchart LR
+    gateway["API Gateway"]
+
+    subgraph customer["Customer Service — Spring Boot"]
+        controller["CustomerController\nREST Controller"]
+
+        service["CustomerService\nLógica de clientes y KYC"]
+
+        security["JWT / Security\nAutenticación y autorización"]
+
+        repository["CustomerRepository\nPersistencia JPA"]
+
+        publisher["EventPublisher\nAdaptador RabbitMQ"]
+
+        dto["DTO / Modelo\nCustomer · KycStatus\nUpdateKycStatusRequest"]
+
+        controller --> service
+        security --> controller
+        controller --> dto
+        service --> dto
+        service --> repository
+        service --> publisher
+    end
+
+    db[("PostgreSQL\nbank_customer")]
+    rabbit["RabbitMQ\nbank.events"]
+
+    gateway -->|"HTTP / JWT"| security
+
+    repository -->|"JPA"| db
+
+    publisher -->|"customer.registered\ncustomer.activated\ncustomer.kyc.status.changed"| rabbit
