@@ -1,0 +1,146 @@
+name: Integrante 1 CI
+
+on:
+  push:
+    branches:
+      - 'feature/**'
+    paths:
+      - 'apps/customer-service/**'
+      - 'apps/notification-audit-service/**'
+      - 'apps/frontend/**'
+      - 'infrastructure/databases/customer/**'
+      - 'infrastructure/databases/notification/**'
+      - '.github/workflows/integrante1-ci.yml'
+
+  pull_request:
+    branches:
+      - develop
+    paths:
+      - 'apps/customer-service/**'
+      - 'apps/notification-audit-service/**'
+      - 'apps/frontend/**'
+      - 'infrastructure/databases/customer/**'
+      - 'infrastructure/databases/notification/**'
+      - '.github/workflows/integrante1-ci.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: integrante1-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  customer-service:
+    name: Customer - Build and Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    defaults:
+      run:
+        working-directory: apps/customer-service
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+          cache-dependency-path: apps/customer-service/pom.xml
+
+      - name: Test Customer Service
+        run: mvn -B clean test
+
+      - name: Build Customer Service
+        run: mvn -B -DskipTests package
+
+      - name: Validate generated JAR
+        if: github.event_name == 'push'
+        run: |
+          JAR="$(find target -maxdepth 1 -type f -name '*.jar' ! -name '*.original' | head -n 1)"
+          test -n "$JAR"
+          test -s "$JAR"
+          echo "Customer JAR OK: $JAR"
+
+      - name: Docker sanity check
+        if: github.event_name == 'push'
+        run: docker build -t bank-usac/customer-service:ci .
+
+  notification-audit-service:
+    name: Notification - Build and Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    defaults:
+      run:
+        working-directory: apps/notification-audit-service
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+          cache-dependency-path: apps/notification-audit-service/pom.xml
+
+      - name: Test Notification Service
+        run: mvn -B clean test
+
+      - name: Build Notification Service
+        run: mvn -B -DskipTests package
+
+      - name: Validate generated JAR
+        if: github.event_name == 'push'
+        run: |
+          JAR="$(find target -maxdepth 1 -type f -name '*.jar' ! -name '*.original' | head -n 1)"
+          test -n "$JAR"
+          test -s "$JAR"
+          echo "Notification JAR OK: $JAR"
+
+      - name: Docker sanity check
+        if: github.event_name == 'push'
+        run: docker build -t bank-usac/notification-audit-service:ci .
+
+  frontend:
+    name: Frontend - Build and Validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    defaults:
+      run:
+        working-directory: apps/frontend
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: apps/frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type check
+        run: npm run type-check
+
+      - name: Build frontend
+        run: npm run build
+
+      - name: Frontend sanity check
+        if: github.event_name == 'push'
+        run: |
+          test -s dist/index.html
+          test -d dist/assets
+          echo "Frontend distribution OK"

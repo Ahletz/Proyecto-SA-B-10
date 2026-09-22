@@ -16,6 +16,15 @@ public class Customer {
     @Column(nullable = false) private String status;
     @Column(nullable = false) private String role;
     @Column(name = "identity_status", nullable = false) private String identityStatus;
+
+    @Enumerated(EnumType.STRING)
+    @Column(
+        name = "kyc_status",
+        nullable = false,
+        columnDefinition = "varchar(20) default 'PENDING'"
+    )
+    private KycStatus kycStatus = KycStatus.PENDING;
+
     @Column(name = "full_name", nullable = false) private String fullName;
     @Column(name = "document_number", nullable = false, unique = true) private String documentNumber;
     @Column(name = "document_photo", nullable = false, length = 4096) private String documentPhoto;
@@ -33,6 +42,7 @@ public class Customer {
     public String getStatus() { return status; }
     public String getRole() { return role; }
     public String getIdentityStatus() { return identityStatus; }
+    public KycStatus getKycStatus() { return kycStatus; }
     public String getFullName() { return fullName; }
     public String getDocumentNumber() { return documentNumber; }
     public String getDocumentPhoto() { return documentPhoto; }
@@ -47,6 +57,7 @@ public class Customer {
     public void setStatus(String v) { status = v; }
     public void setRole(String v) { role = v; }
     public void setIdentityStatus(String v) { identityStatus = v; }
+    public void setKycStatus(KycStatus v) { kycStatus = v; }
     public void setFullName(String v) { fullName = v; }
     public void setDocumentNumber(String v) { documentNumber = v; }
     public void setDocumentPhoto(String v) { documentPhoto = v; }
