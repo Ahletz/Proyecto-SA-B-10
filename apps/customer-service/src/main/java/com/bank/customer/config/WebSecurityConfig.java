@@ -3,6 +3,7 @@ package com.bank.customer.config;
 import com.bank.customer.security.JwtAuthenticationFilter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
@@ -17,6 +18,7 @@ public class WebSecurityConfig {
             .httpBasic(b -> b.disable()).formLogin(f -> f.disable())
             .authorizeHttpRequests(a -> a
                 .requestMatchers("/api/customers/register","/api/customers/login","/api/customers/activate/**","/actuator/**").permitAll()
+                .requestMatchers(HttpMethod.PATCH, "/api/customers/*/kyc").hasRole("ADMIN")
                 .anyRequest().authenticated());
         http.addFilterBefore(new JwtAuthenticationFilter(), UsernamePasswordAuthenticationFilter.class);
         return http.build();
