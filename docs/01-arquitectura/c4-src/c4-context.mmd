@@ -1,0 +1,16 @@
+flowchart LR
+    cliente["👤 Cliente\nCuentahabiente"]
+    cajero["👤 Cajero"]
+    admin["👤 Administrador"]
+
+    bank["Bank USAC\nSistema Bancario\nGestión de clientes, cuentas,\ntransferencias, pagos y auditoría"]
+
+    payment["Sistema externo de pagos\nSimulado"]
+    smtp["Servicio SMTP\nCorreo / MailHog"]
+
+    cliente -->|"Registro, perfil,\ncuentas y transferencias"| bank
+    cajero -->|"Operaciones autorizadas\ny pagos"| bank
+    admin -->|"Administración,\nKYC y auditoría"| bank
+
+    bank -.->|"Procesamiento de pago\nsimulado"| payment
+    bank -.->|"Notificaciones y\nactivación por correo"| smtp

@@ -1,43 +1,111 @@
-import React from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { HomePage } from './pages/HomePage';
-import { RegisterPage } from './pages/RegisterPage';
-import { LoginPage } from './pages/LoginPage';
-import { ActivationPage } from './pages/ActivationPage';
-import { ProfilePage } from './pages/ProfilePage';
-import { AuditPage } from './pages/AuditPage';
-import { ProtectedRoute } from './components/ProtectedRoute';
-import './App.css';
+import{
+  BrowserRouter,
+  Routes,
+  Route
+}from'react-router-dom';
 
-export const App: React.FC = () => {
-  return (
-    <BrowserRouter>
-      <Routes>
-        <Route path="/" element={<HomePage />} />
-        <Route path="/register" element={<RegisterPage />} />
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/activate" element={<ActivationPage />} />
-        
-        <Route
-          path="/profile"
-          element={
-            <ProtectedRoute>
-              <ProfilePage />
-            </ProtectedRoute>
-          }
-        />
-        
-        <Route
-          path="/audit"
-          element={
-            <ProtectedRoute>
-              <AuditPage />
-            </ProtectedRoute>
-          }
-        />
+import{HomePage}from'./pages/HomePage';
+import{LoginPage}from'./pages/LoginPage';
+import{RegisterPage}from'./pages/RegisterPage';
+import{ActivationPage}from'./pages/ActivationPage';
+import{ProfilePage}from'./pages/ProfilePage';
+import{AccountsPage}from'./pages/AccountsPage';
+import{TransferPage}from'./pages/TransferPage';
+import{TransactionHistoryPage}from'./pages/TransactionHistoryPage';
+import{AuditPage}from'./pages/AuditPage';
+import{PaymentsPage}from'./pages/PaymentsPage';
+import{NotificationsPage}from'./pages/NotificationsPage';
+import{ProtectedRoute}from'./components/ProtectedRoute';
 
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </BrowserRouter>
-  );
-};
+import'./App.css';
+
+export const App=()=>(
+  <BrowserRouter>
+    <Routes>
+      <Route
+        path="/"
+        element={<HomePage/>}
+      />
+
+      <Route
+        path="/login"
+        element={<LoginPage/>}
+      />
+
+      <Route
+        path="/register"
+        element={<RegisterPage/>}
+      />
+
+      <Route
+        path="/activate"
+        element={<ActivationPage/>}
+      />
+
+      <Route
+        path="/profile"
+        element={
+          <ProtectedRoute>
+            <ProfilePage/>
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/accounts"
+        element={
+          <ProtectedRoute>
+            <AccountsPage/>
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/transfer"
+        element={
+          <ProtectedRoute>
+            <TransferPage/>
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/transactions"
+        element={
+          <ProtectedRoute>
+            <TransactionHistoryPage/>
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/audit"
+        element={
+          <ProtectedRoute roles={['ADMIN']}>
+            <AuditPage/>
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/notifications"
+        element={
+          <ProtectedRoute roles={['ADMIN']}>
+            <NotificationsPage/>
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/payments"
+        element={
+          <ProtectedRoute
+            roles={['ADMIN','CASHIER']}
+          >
+            <PaymentsPage/>
+          </ProtectedRoute>
+        }
+      />
+    </Routes>
+  </BrowserRouter>
+);

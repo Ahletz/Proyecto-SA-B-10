@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+ROOT="$(cd "$(dirname "$0")/../.." && pwd)"; API_BASE=http://localhost:8080 "$ROOT/tests/e2e/saga-failures.sh"

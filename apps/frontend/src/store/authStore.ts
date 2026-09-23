@@ -1,160 +1,120 @@
-import { create } from 'zustand';
+import {create} from 'zustand';
+import {api} from '../lib/api';
 
-const readJsonSafely = async (response: Response) => {
-  const text = await response.text();
-  if (!text) return null;
+export type Role='ADMIN'|'CASHIER'|'CLIENT';
+export type KycStatus='PENDING'|'VERIFIED'|'REJECTED';
 
-  try {
-    return JSON.parse(text);
-  } catch {
-    return null;
-  }
-};
-
-export interface Customer {
-  customerId: string;
-  username: string;
-  email: string;
-  status: 'PENDING_ACTIVATION' | 'ACTIVE' | 'INACTIVE';
-  registeredAt: string;
-  activationToken?: string;
+export interface Customer{
+  customerId:string;
+  username:string;
+  email:string;
+  fullName:string;
+  documentNumber:string;
+  documentPhoto:string;
+  birthDate:string;
+  address:string;
+  role:Role;
+  identityStatus:string;
+  kycStatus:KycStatus;
+  status:string;
+  registeredAt:string;
 }
 
-export interface AuthState {
-  customer: Customer | null;
-  token: string | null;
-  isLoading: boolean;
-  error: string | null;
-  register: (username: string, email: string, password: string) => Promise<void>;
-  login: (username: string, password: string) => Promise<void>;
-  activate: (token: string) => Promise<void>;
-  logout: () => void;
-  updateProfile: (email: string, password?: string) => Promise<void>;
-  clearError: () => void;
+interface State{
+  customer:Customer|null;
+  token:string|null;
+  loading:boolean;
+  error:string|null;
+  login:(u:string,p:string)=>Promise<void>;
+  loadMe:()=>Promise<void>;
+  logout:()=>void;
 }
 
-export const useAuthStore = create<AuthState>((set) => ({
-  customer: null,
-  token: localStorage.getItem('token') || null,
-  isLoading: false,
-  error: null,
+export const useAuthStore=create<State>((set)=>({
+  customer:null,
+  token:localStorage.getItem('token'),
+  loading:false,
+  error:null,
 
-  register: async (username: string, email: string, password: string) => {
-    set({ isLoading: true, error: null });
-    try {
-      const response = await fetch('/api/customers/register', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, email, password })
+  login:async(u,p)=>{
+    set({loading:true,error:null});
+
+    try{
+      const d=await api('/api/customers/login',{
+        method:'POST',
+        body:JSON.stringify({
+          username:u,
+          password:p
+        })
       });
-      
-      if (!response.ok) {
-        const error = await readJsonSafely(response);
-        throw new Error(error?.message || 'Registro fallido');
-      }
-      
-      const data = await readJsonSafely(response);
-      set({ customer: data ?? null, isLoading: false });
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Error al registrar';
-      set({ error: message, isLoading: false });
-      throw err;
+
+      localStorage.setItem('token',d.token);
+
+      set({token:d.token});
+
+      const me=await api('/api/customers/me');
+
+      set({
+        customer:me,
+        loading:false
+      });
+    }catch(e){
+      set({
+        error:e instanceof Error
+          ?e.message
+          :String(e),
+        loading:false
+      });
+
+      throw e;
     }
   },
 
-  login: async (username: string, password: string) => {
-    set({ isLoading: true, error: null });
-    try {
-      const response = await fetch('/api/customers/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password })
+  loadMe:async()=>{
+    const token=localStorage.getItem('token');
+
+    if(!token){
+      set({
+        customer:null,
+        token:null,
+        loading:false
       });
-      
-      if (!response.ok) {
-        const error = await readJsonSafely(response);
-        throw new Error(error?.message || 'Login fallido');
-      }
-      
-      const data = await readJsonSafely(response);
-      if (!data?.token) {
-        throw new Error('No se recibió un token válido del servidor');
-      }
+      return;
+    }
 
-      const token = data.token;
-      localStorage.setItem('token', token);
+    set({
+      loading:true,
+      error:null
+    });
 
-      const meResponse = await fetch('/api/customers/me', {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
+    try{
+      const customer=await api('/api/customers/me');
+
+      set({
+        customer,
+        token,
+        loading:false
       });
+    }catch(e){
+      localStorage.removeItem('token');
 
-      if (!meResponse.ok) {
-        throw new Error('No se pudo cargar el perfil del usuario');
-      }
-
-      const customer = await readJsonSafely(meResponse);
-      set({ token, customer: customer ?? null, isLoading: false });
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Error al iniciar sesión';
-      set({ error: message, isLoading: false });
-      throw err;
+      set({
+        customer:null,
+        token:null,
+        loading:false,
+        error:e instanceof Error
+          ?e.message
+          :String(e)
+      });
     }
   },
 
-  activate: async (token: string) => {
-    set({ isLoading: true, error: null });
-    try {
-      const response = await fetch(`/api/customers/activate/${token}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
-      });
-      
-      if (!response.ok) {
-        const error = await readJsonSafely(response);
-        throw new Error(error?.message || 'Activación fallida');
-      }
-      
-      const data = await readJsonSafely(response);
-      set({ customer: data ?? null, isLoading: false });
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Error al activar cuenta';
-      set({ error: message, isLoading: false });
-      throw err;
-    }
-  },
-
-  logout: () => {
+  logout:()=>{
     localStorage.removeItem('token');
-    set({ customer: null, token: null, error: null });
-  },
 
-  updateProfile: async (email: string, password?: string) => {
-    set({ isLoading: true, error: null });
-    try {
-      const response = await fetch('/api/customers/me', {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
-        body: JSON.stringify({ email, ...(password && { password }) })
-      });
-      
-      if (!response.ok) {
-        const error = await readJsonSafely(response);
-        throw new Error(error?.message || 'Error al actualizar perfil');
-      }
-      
-      const data = await readJsonSafely(response);
-      set({ customer: data ?? null, isLoading: false });
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Error al actualizar perfil';
-      set({ error: message, isLoading: false });
-      throw err;
-    }
-  },
-
-  clearError: () => set({ error: null })
+    set({
+      customer:null,
+      token:null
+    });
+  }
 }));

@@ -26,7 +26,9 @@ describe('CreateTransactionService - PostgreSQL integration', () => {
   });
 
   afterAll(async () => {
-    await moduleRef.close();
+    if (moduleRef) {
+      await moduleRef.close();
+    }
   });
 
   it('should persist a transaction in PostgreSQL', async () => {

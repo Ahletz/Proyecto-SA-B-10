@@ -1,0 +1,1 @@
+import {useEffect,useState} from 'react';import{api}from'../lib/api';export function PaymentsPage(){const[p,setP]=useState<any[]>([]);useEffect(()=>{api('/api/payments').then(setP)},[]);return <section className="page"><h1>Pagos procesados</h1><pre>{JSON.stringify(p,null,2)}</pre></section>}
