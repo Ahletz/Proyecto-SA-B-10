@@ -19,14 +19,41 @@ export class AccountService {
     private readonly rabbit: RabbitService,
   ) {}
 
-  async create(customerId: string, type: AccountType, initialBalance = 0) {
+  async create(customerId: string, type: AccountType, initialBalance = 0, minBalance?: number, feeAmount?: number | null) {
     if (!['MONETARY','SAVINGS'].includes(type)) throw new Error('Invalid account type');
     if (!Number.isFinite(initialBalance) || initialBalance < 0) throw new Error('Invalid initialBalance');
-    const a = this.accounts.create({ accountId: randomUUID(), customerId, type, balance: initialBalance.toFixed(2), reservedBalance: '0.00', status: 'ACTIVE', createdAt: new Date(), lastActivityAt: new Date() });
+
+    const resolvedMinBalance = (minBalance !== undefined && minBalance !== null)
+      ? minBalance
+      : (type === 'SAVINGS' ? 50 : 0);
+    if (!Number.isFinite(resolvedMinBalance) || resolvedMinBalance < 0) throw new Error('Invalid minBalance');
+
+    if (feeAmount !== undefined && feeAmount !== null && (!Number.isFinite(feeAmount) || feeAmount < 0)) {
+      throw new Error('Invalid feeAmount');
+    }
+
+    const a = this.accounts.create({
+      accountId: randomUUID(),
+      customerId,
+      type,
+      balance: initialBalance.toFixed(2),
+      reservedBalance: '0.00',
+      minBalance: resolvedMinBalance.toFixed(2),
+      feeAmount: (feeAmount !== undefined && feeAmount !== null) ? feeAmount.toFixed(2) : null,
+      status: 'ACTIVE',
+      createdAt: new Date(),
+      lastActivityAt: new Date(),
+    });
     await this.accounts.save(a);
-    await this.emit('account.created', randomUUID(), { accountId: a.accountId, customerId, type, balance: Number(a.balance), status: a.status });
+    await this.emit('account.created', randomUUID(), {
+      accountId: a.accountId, customerId, type,
+      balance: Number(a.balance), minBalance: Number(a.minBalance),
+      feeAmount: a.feeAmount !== null ? Number(a.feeAmount) : null,
+      status: a.status,
+    });
     return this.toDto(a);
   }
+
   async list(customerId: string) { return (await this.accounts.find({ where: { customerId } })).map(a => this.toDto(a)); }
   async get(accountId: string) { const a = await this.accounts.findOneBy({ accountId }); if (!a) throw new Error('Account not found'); return this.toDto(a); }
 
@@ -47,12 +74,23 @@ export class AccountService {
     if (!source || !target || source.status !== 'ACTIVE' || target.status !== 'ACTIVE') {
       return this.emit('account.funds.rejected', event.correlationId, { transactionId: p.transactionId, reason: 'ACCOUNT_NOT_FOUND_OR_INACTIVE' });
     }
-    const available = Number(source.balance) - Number(source.reservedBalance);
-    if (available < amount) return this.emit('account.funds.rejected', event.correlationId, { transactionId: p.transactionId, reason: 'INSUFFICIENT_FUNDS' });
-    source.reservedBalance = (Number(source.reservedBalance) + amount).toFixed(2); source.lastActivityAt = new Date();
+    const fee = Number(source.feeAmount ?? 0);
+    const totalHold = amount + fee;
+    const minBalance = Number(source.minBalance ?? 0);
+    const available = Number(source.balance) - Number(source.reservedBalance) - minBalance;
+    if (available < totalHold) {
+      return this.emit('account.funds.rejected', event.correlationId, { transactionId: p.transactionId, reason: 'INSUFFICIENT_FUNDS' });
+    }
+    source.reservedBalance = (Number(source.reservedBalance) + totalHold).toFixed(2);
+    source.lastActivityAt = new Date();
     await this.accounts.save(source);
-    await this.reservations.save({ transactionId: p.transactionId, sourceAccount: p.sourceAccount, targetAccount: p.targetAccount, amount: amount.toFixed(2), status: 'RESERVED', createdAt: new Date() });
-    await this.emit('account.funds.reserved', event.correlationId, { transactionId: p.transactionId, sourceAccount: p.sourceAccount, targetAccount: p.targetAccount, amount });
+    await this.reservations.save({
+      transactionId: p.transactionId, sourceAccount: p.sourceAccount, targetAccount: p.targetAccount,
+      amount: amount.toFixed(2), feeAmount: fee.toFixed(2), status: 'RESERVED', createdAt: new Date(),
+    });
+    await this.emit('account.funds.reserved', event.correlationId, {
+      transactionId: p.transactionId, sourceAccount: p.sourceAccount, targetAccount: p.targetAccount, amount, fee,
+    });
   }
 
   private async complete(event: BankEvent<any>) {
@@ -62,11 +100,19 @@ export class AccountService {
     const s = await this.accounts.findOneByOrFail({ accountId: r.sourceAccount });
     const t = await this.accounts.findOneByOrFail({ accountId: r.targetAccount });
     const amount = Number(r.amount);
-    s.balance = (Number(s.balance) - amount).toFixed(2); s.reservedBalance = Math.max(0, Number(s.reservedBalance) - amount).toFixed(2); s.lastActivityAt = new Date();
-    t.balance = (Number(t.balance) + amount).toFixed(2); t.lastActivityAt = new Date();
+    const fee = Number(r.feeAmount ?? 0);
+    const totalHold = amount + fee;
+    s.balance = (Number(s.balance) - totalHold).toFixed(2);
+    s.reservedBalance = Math.max(0, Number(s.reservedBalance) - totalHold).toFixed(2);
+    s.lastActivityAt = new Date();
+    t.balance = (Number(t.balance) + amount).toFixed(2);
+    t.lastActivityAt = new Date();
     r.status = 'COMPLETED';
-    await this.accounts.save([s,t]); await this.reservations.save(r);
-    await this.emit('account.transfer.completed', event.correlationId, { transactionId: tx, sourceAccount: s.accountId, targetAccount: t.accountId, amount });
+    await this.accounts.save([s,t]);
+    await this.reservations.save(r);
+    await this.emit('account.transfer.completed', event.correlationId, {
+      transactionId: tx, sourceAccount: s.accountId, targetAccount: t.accountId, amount, fee,
+    });
   }
 
   private async release(event: BankEvent<any>) {
@@ -74,10 +120,15 @@ export class AccountService {
     const r = await this.reservations.findOneBy({ transactionId: tx });
     if (!r || r.status === 'RELEASED') return;
     const s = await this.accounts.findOneByOrFail({ accountId: r.sourceAccount });
-    const amount = Number(r.amount);
-    s.reservedBalance = Math.max(0, Number(s.reservedBalance) - amount).toFixed(2); s.lastActivityAt = new Date(); r.status = 'RELEASED';
-    await this.accounts.save(s); await this.reservations.save(r);
-    await this.emit('account.funds.released', event.correlationId, { transactionId: tx, amount, reason: 'SAGA_COMPENSATION' });
+    const totalHold = Number(r.amount) + Number(r.feeAmount ?? 0);
+    s.reservedBalance = Math.max(0, Number(s.reservedBalance) - totalHold).toFixed(2);
+    s.lastActivityAt = new Date();
+    r.status = 'RELEASED';
+    await this.accounts.save(s);
+    await this.reservations.save(r);
+    await this.emit('account.funds.released', event.correlationId, {
+      transactionId: tx, amount: Number(r.amount), fee: Number(r.feeAmount ?? 0), reason: 'SAGA_COMPENSATION',
+    });
   }
 
   @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT)
@@ -91,5 +142,15 @@ export class AccountService {
   private async emit(type: string, correlationId: string, payload: any) {
     await this.rabbit.publish({ eventId: randomUUID(), eventType: type, version: 1, timestamp: new Date().toISOString(), correlationId, payload });
   }
-  private toDto(a: AccountEntity) { return { accountId:a.accountId, customerId:a.customerId, type:a.type, balance:Number(a.balance), reservedBalance:Number(a.reservedBalance), availableBalance:Number(a.balance)-Number(a.reservedBalance), status:a.status, lastActivityAt:a.lastActivityAt }; }
+
+  private toDto(a: AccountEntity) {
+    return {
+      accountId: a.accountId, customerId: a.customerId, type: a.type,
+      balance: Number(a.balance), reservedBalance: Number(a.reservedBalance),
+      availableBalance: Number(a.balance) - Number(a.reservedBalance),
+      minBalance: Number(a.minBalance),
+      feeAmount: (a.feeAmount !== null && a.feeAmount !== undefined) ? Number(a.feeAmount) : null,
+      status: a.status, lastActivityAt: a.lastActivityAt,
+    };
+  }
 }
