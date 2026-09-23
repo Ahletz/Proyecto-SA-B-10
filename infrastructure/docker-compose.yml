@@ -129,6 +129,9 @@ services:
       RABBITMQ_URL: amqp://${RABBITMQ_DEFAULT_USER:-rabbit_user}:${RABBITMQ_DEFAULT_PASS:-rabbit_password}@rabbitmq:5672
       RABBITMQ_QUEUE: payment-service.events
       PAYMENT_MAX_AMOUNT: 1000000
+      PAYMENT_SIMULATE_FAILURE_RATE: 0.1
+      PAYMENT_SIMULATE_TIMEOUT_RATE: 0.05
+      PAYMENT_SIMULATE_TIMEOUT_MS: 3000
     expose: ["3005"]
     depends_on:
       payment-db: { condition: service_healthy }
