@@ -23,6 +23,7 @@ export class RabbitMqService
 
   private connection: ChannelModel | null = null;
   private channel: Channel | null = null;
+  private shuttingDown = false;
 
   constructor(
     private readonly configService: ConfigService,
@@ -42,6 +43,11 @@ export class RabbitMqService
 
     this.channel =
       await this.connection.createChannel();
+
+    this.exitOnUnexpectedClose(
+      this.connection,
+      this.channel,
+    );
 
     const exchange =
       this.configService.get<string>(
@@ -402,7 +408,40 @@ export class RabbitMqService
     );
   }
 
+  /**
+   * Sin reconexión propia: si RabbitMQ cierra la conexión o el canal
+   * (por ejemplo, al reiniciarse el broker), el servicio quedaría vivo
+   * pero sin consumir ni publicar. Se termina el proceso para que
+   * Kubernetes (o Docker con restart) lo levante conectado al broker actual.
+   */
+  private exitOnUnexpectedClose(
+    connection: ChannelModel,
+    channel: Channel,
+  ): void {
+    const exit = (source: string) => (error?: unknown) => {
+      if (this.shuttingDown) {
+        return;
+      }
+
+      this.logger.error(
+        `RabbitMQ ${source} closed` +
+          (error ? `: ${String(error)}` : '') +
+          '. Exiting so the service restarts with a new connection',
+      );
+
+      process.exit(1);
+    };
+
+    connection.on('error', (error: unknown) =>
+      this.logger.error(`RabbitMQ connection error: ${String(error)}`),
+    );
+    connection.on('close', exit('connection'));
+    channel.on('close', exit('channel'));
+  }
+
   async onModuleDestroy(): Promise<void> {
+    this.shuttingDown = true;
+
     if (this.channel) {
       await this.channel.close();
     }

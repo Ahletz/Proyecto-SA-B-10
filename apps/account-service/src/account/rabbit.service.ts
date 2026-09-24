@@ -9,12 +9,14 @@ export class RabbitService implements OnModuleDestroy {
   private readonly logger = new Logger(RabbitService.name);
   private connection: ChannelModel | null = null;
   private channel: Channel | null = null;
+  private shuttingDown = false;
   constructor(private readonly config: ConfigService) {}
 
   private async ch(): Promise<Channel> {
     if (this.channel) return this.channel;
     this.connection = await amqp.connect(this.config.getOrThrow<string>('RABBITMQ_URL'));
     this.channel = await this.connection.createChannel();
+    this.exitOnUnexpectedClose(this.connection, this.channel);
     await this.channel.assertExchange('bank.events', 'topic', { durable: true });
     await this.channel.assertExchange('bank.events.retry', 'topic', { durable: true });
     await this.channel.assertExchange('bank.events.dlx', 'topic', { durable: true });
@@ -65,5 +67,19 @@ export class RabbitService implements OnModuleDestroy {
     this.logger[count < max ? 'warn' : 'error'](`${m.fields.routingKey}: ${count < max ? `retry ${count + 1}/${max}` : 'DLQ'}`);
   }
 
-  async onModuleDestroy() { if (this.channel) await this.channel.close(); if (this.connection) await this.connection.close(); }
+  // Sin reconexión propia: si RabbitMQ cierra la conexión o el canal (p. ej. reinicio del
+  // broker), el servicio quedaría vivo sin consumir ni publicar. Se termina el proceso para
+  // que Kubernetes (o Docker con restart) lo levante conectado al broker actual.
+  private exitOnUnexpectedClose(connection: ChannelModel, channel: Channel) {
+    const exit = (source: string) => (error?: unknown) => {
+      if (this.shuttingDown) return;
+      this.logger.error(`RabbitMQ ${source} closed${error ? `: ${String(error)}` : ''}. Exiting so the service restarts with a new connection`);
+      process.exit(1);
+    };
+    connection.on('error', (error: unknown) => this.logger.error(`RabbitMQ connection error: ${String(error)}`));
+    connection.on('close', exit('connection'));
+    channel.on('close', exit('channel'));
+  }
+
+  async onModuleDestroy() { this.shuttingDown = true; if (this.channel) await this.channel.close(); if (this.connection) await this.connection.close(); }
 }
