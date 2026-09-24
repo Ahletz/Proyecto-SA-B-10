@@ -46,7 +46,7 @@ Ejemplo:
 | Método | Ruta | Acceso | Descripción |
 |---|---|---|---|
 | POST | `/api/transfers` | CLIENT | aceptar transferencia y publicar comando |
-| GET | `/api/transfers/:correlationId` | autenticado | consultar estado |
+| GET | `/api/transfers/:correlationId` | autenticado | consultar estado; un CLIENT solo ve transferencias de sus cuentas (si no, 403) |
 
 Request:
 ```json
