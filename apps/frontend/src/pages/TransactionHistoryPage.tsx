@@ -1,5 +1,5 @@
 import {useCallback,useEffect,useState} from 'react';
-import {Link,useSearchParams} from 'react-router-dom';
+import {useSearchParams} from 'react-router-dom';
 import {api} from '../lib/api';
 import {
   TransactionHistoryItem,
@@ -134,10 +134,6 @@ export function TransactionHistoryPage(){
           <p className="muted">
             Transferencias enviadas y recibidas por cuenta.
           </p>
-        </div>
-
-        <div className="toolbar">
-          <Link to="/">Volver</Link>
         </div>
       </div>
 

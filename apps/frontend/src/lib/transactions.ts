@@ -1,4 +1,4 @@
-import {api} from './api';
+import {api,ApiError} from './api';
 
 export type TransactionStatus='PENDING'|'APPROVED'|'FAILED';
 
@@ -79,4 +79,80 @@ const FAILURE_REASON_LABELS:Record<string,string>={
 
 export function failureReasonLabel(reason:string){
   return FAILURE_REASON_LABELS[reason]??reason;
+}
+
+// Estados internos de la Saga (Transaction Service).
+export type DetailedStatus=
+  'PENDING'|'PROCESSING'|'COMPLETED'|'FAILED'|'COMPENSATING'|'COMPENSATED';
+
+export interface TransferStatus{
+  transactionId:string;
+  sourceAccount:string;
+  targetAccount:string;
+  amount:number;
+  status:DetailedStatus;
+  failureReason?:string|null;
+  correlationId:string;
+  createdAt:string;
+  updatedAt:string;
+}
+
+export interface TransferAccepted{
+  accepted:boolean;
+  correlationId:string;
+  eventId:string;
+  status:'PENDING';
+}
+
+export const DETAILED_STATUS_LABELS:Record<DetailedStatus,string>={
+  PENDING:'Pendiente',
+  PROCESSING:'Procesando pago',
+  COMPLETED:'Completada',
+  FAILED:'Fallida',
+  COMPENSATING:'Revirtiendo fondos',
+  COMPENSATED:'Fallida · fondos devueltos'
+};
+
+const TERMINAL_STATUSES:DetailedStatus[]=['COMPLETED','FAILED','COMPENSATED'];
+
+export function isTerminalStatus(status:DetailedStatus){
+  return TERMINAL_STATUSES.includes(status);
+}
+
+// Mismo mapeo que el evento transaction.status.changed (decisión 1).
+export function publicStatus(status:DetailedStatus):TransactionStatus{
+  if(status==='COMPLETED'){
+    return 'APPROVED';
+  }
+
+  return status==='FAILED'||status==='COMPENSATED'?'FAILED':'PENDING';
+}
+
+export function createTransfer(body:{
+  sourceAccount:string;
+  targetAccount:string;
+  amount:number;
+}):Promise<TransferAccepted>{
+  return api('/api/transfers',{
+    method:'POST',
+    body:JSON.stringify(body)
+  });
+}
+
+/*
+ * Devuelve null mientras Transaction Service todavía no consume el
+ * evento transaction.transfer.requested (responde 404).
+ */
+export async function fetchTransferStatus(
+  correlationId:string
+):Promise<TransferStatus|null>{
+  try{
+    return await api(`/api/transfers/${correlationId}`);
+  }catch(e){
+    if(e instanceof ApiError&&e.status===404){
+      return null;
+    }
+
+    throw e;
+  }
 }

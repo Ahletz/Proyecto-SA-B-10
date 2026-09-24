@@ -291,3 +291,154 @@
     overflow-x:auto;
   }
 }
+
+/* Shell: cabecera con navegación por rol (components/AppLayout.tsx). */
+.app-header{
+  background:#0b2347;
+  color:white;
+}
+
+.app-header-inner{
+  max-width:1200px;
+  margin:auto;
+  padding:12px 28px;
+  display:flex;
+  align-items:center;
+  gap:20px;
+  flex-wrap:wrap;
+}
+
+.brand{
+  color:white;
+  font-weight:800;
+  font-size:18px;
+  text-decoration:none;
+}
+
+.app-nav{
+  display:flex;
+  gap:4px;
+  flex-wrap:wrap;
+  flex:1;
+}
+
+.app-nav a{
+  color:#c8d6ee;
+  text-decoration:none;
+  padding:8px 12px;
+  border-radius:8px;
+}
+
+.app-nav a:hover{
+  color:white;
+  background:#ffffff14;
+}
+
+.app-nav a.active{
+  color:white;
+  background:#ffffff26;
+  font-weight:600;
+}
+
+.app-user{
+  display:flex;
+  align-items:center;
+  gap:12px;
+}
+
+.app-user .muted{
+  color:#9fb2d3;
+}
+
+button.secondary{
+  background:transparent;
+  border:1px solid #ffffff55;
+}
+
+button:disabled{
+  opacity:.55;
+  cursor:not-allowed;
+}
+
+.shortcut-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(240px,1fr));
+  gap:16px;
+  margin-top:20px;
+}
+
+.shortcut{
+  display:grid;
+  gap:6px;
+  color:inherit;
+  text-decoration:none;
+}
+
+.shortcut:hover{
+  border-color:#0b4db5;
+}
+
+/* Transferencias */
+.transfer-layout{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) minmax(0,1fr);
+  gap:20px;
+  align-items:start;
+}
+
+.transfer-layout .form{
+  min-width:0;
+}
+
+.transfer-layout .form select,
+.transfer-layout .form input{
+  width:100%;
+  min-width:0;
+  text-overflow:ellipsis;
+}
+
+.transfer-status dd{
+  word-break:break-all;
+}
+
+.transfer-status{
+  display:grid;
+  gap:14px;
+  justify-items:start;
+}
+
+.transfer-status h2{
+  margin:0;
+}
+
+.transfer-failure{
+  width:100%;
+  padding:12px;
+  border-radius:8px;
+  background:#fef3f2;
+  color:#b42318;
+}
+
+.transfer-failure p{
+  margin:6px 0 0;
+}
+
+.transfer-correlation{
+  margin:0;
+  font-size:13px;
+}
+
+@media (max-width:760px){
+  .page{
+    padding:16px;
+  }
+
+  .app-header-inner{
+    padding:12px 16px;
+  }
+
+  .transfer-layout,
+  .profile-grid{
+    grid-template-columns:1fr;
+  }
+}
