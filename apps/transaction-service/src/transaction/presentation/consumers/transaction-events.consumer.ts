@@ -10,6 +10,7 @@ import { BankEvent } from '../../../common/events/bank-event.interface';
 import { CreateTransactionService } from '../../application/services/create-transaction.service';
 import { UpdateTransactionStateService } from '../../application/services/update-transaction-state.service';
 import { CustomerKycService } from '../../application/services/customer-kyc.service';
+import { Transaction } from '../../domain/entities/transaction.entity';
 import { TransactionStatus } from '../../domain/enums/transaction-status.enum';
 import { RabbitMqService } from '../../infrastructure/messaging/rabbitmq.service';
 import { TransactionEventPublisher } from '../../infrastructure/messaging/transaction-event.publisher';
@@ -254,6 +255,7 @@ export class TransactionEventsConsumer
         .publishTransactionFailed(
           failed,
           KYC_NOT_VERIFIED,
+          event.eventId,
         );
 
       this.logger.warn(
@@ -268,6 +270,7 @@ export class TransactionEventsConsumer
     await this.transactionEventPublisher
       .publishTransactionCreated(
         transaction,
+        event.eventId,
       );
 
     this.logger.log(
@@ -309,6 +312,16 @@ export class TransactionEventsConsumer
           event.payload.transactionId,
         );
 
+    if (
+      !this.reachedStatus(
+        transaction,
+        TransactionStatus.PROCESSING,
+        event,
+      )
+    ) {
+      return;
+    }
+
     this.logger.log(
       `Transaction ${transaction.transactionId} ` +
         `is PROCESSING`,
@@ -331,10 +344,21 @@ export class TransactionEventsConsumer
           reason,
         );
 
+    if (
+      !this.reachedStatus(
+        transaction,
+        TransactionStatus.FAILED,
+        event,
+      )
+    ) {
+      return;
+    }
+
     await this.transactionEventPublisher
       .publishTransactionFailed(
         transaction,
         reason,
+        event.eventId,
       );
   }
 
@@ -351,6 +375,16 @@ export class TransactionEventsConsumer
             event.payload.reason,
           ),
         );
+
+    if (
+      !this.reachedStatus(
+        transaction,
+        TransactionStatus.COMPENSATING,
+        event,
+      )
+    ) {
+      return;
+    }
 
     this.logger.warn(
       `Transaction ${transaction.transactionId} ` +
@@ -369,9 +403,20 @@ export class TransactionEventsConsumer
           event.payload.transactionId,
         );
 
+    if (
+      !this.reachedStatus(
+        transaction,
+        TransactionStatus.COMPLETED,
+        event,
+      )
+    ) {
+      return;
+    }
+
     await this.transactionEventPublisher
       .publishTransactionCompleted(
         transaction,
+        event.eventId,
       );
   }
 
@@ -391,10 +436,21 @@ export class TransactionEventsConsumer
           reason,
         );
 
+    if (
+      !this.reachedStatus(
+        transaction,
+        TransactionStatus.FAILED,
+        event,
+      )
+    ) {
+      return;
+    }
+
     await this.transactionEventPublisher
       .publishTransactionFailed(
         transaction,
         reason,
+        event.eventId,
       );
   }
 
@@ -409,10 +465,44 @@ export class TransactionEventsConsumer
           event.payload.transactionId,
         );
 
+    if (
+      !this.reachedStatus(
+        transaction,
+        TransactionStatus.COMPENSATED,
+        event,
+      )
+    ) {
+      return;
+    }
+
     await this.transactionEventPublisher
       .publishTransactionCompensated(
         transaction,
+        event.eventId,
       );
+  }
+
+  /**
+   * false si el evento llegó tarde: la Saga ya había avanzado a otro
+   * estado y no hay nada que publicar.
+   */
+  private reachedStatus(
+    transaction: Transaction,
+    expected: TransactionStatus,
+    event: BankEvent,
+  ): boolean {
+    if (transaction.status === expected) {
+      return true;
+    }
+
+    this.logger.warn(
+      `Stale ${event.eventType} ignored: ` +
+        `transaction ${transaction.transactionId} ` +
+        `is already ${transaction.status} ` +
+        `[eventId=${event.eventId}]`,
+    );
+
+    return false;
   }
 
   private parseEvent(

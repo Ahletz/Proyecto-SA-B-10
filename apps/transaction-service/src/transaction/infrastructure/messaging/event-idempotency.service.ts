@@ -24,26 +24,24 @@ export class EventIdempotencyService {
     return count > 0;
   }
 
+  /**
+   * ON CONFLICT DO NOTHING: si dos entregas del mismo evento se procesan
+   * a la vez (prefetch > 1), la segunda no falla ni pisa a la primera.
+   */
   async markAsProcessed(
     event: BankEvent,
   ): Promise<void> {
-    const processedEvent =
-      new ProcessedEventOrmEntity();
-
-    processedEvent.eventId =
-      event.eventId;
-
-    processedEvent.eventType =
-      event.eventType;
-
-    processedEvent.correlationId =
-      event.correlationId;
-
-    processedEvent.processedAt =
-      new Date();
-
-    await this.repository.save(
-      processedEvent,
-    );
+    await this.repository
+      .createQueryBuilder()
+      .insert()
+      .into(ProcessedEventOrmEntity)
+      .values({
+        eventId: event.eventId,
+        eventType: event.eventType,
+        correlationId: event.correlationId,
+        processedAt: new Date(),
+      })
+      .orIgnore()
+      .execute();
   }
 }

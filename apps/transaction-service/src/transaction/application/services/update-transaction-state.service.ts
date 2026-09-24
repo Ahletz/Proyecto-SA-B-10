@@ -4,6 +4,31 @@ import { TransactionRepository } from '../ports/transaction.repository';
 import { Transaction } from '../../domain/entities/transaction.entity';
 import { TransactionStatus } from '../../domain/enums/transaction-status.enum';
 
+/**
+ * Avance de la Saga. Un evento que pide un estado de una etapa igual o
+ * anterior a la actual llegó tarde (reentrega o reintento después de que
+ * la Saga avanzó): se ignora en vez de fallar y acabar en la DLQ.
+ */
+const SAGA_STAGE: Record<TransactionStatus, number> = {
+  [TransactionStatus.PENDING]: 0,
+  [TransactionStatus.PROCESSING]: 1,
+  [TransactionStatus.COMPENSATING]: 2,
+  [TransactionStatus.COMPLETED]: 3,
+  [TransactionStatus.FAILED]: 3,
+  [TransactionStatus.COMPENSATED]: 3,
+};
+
+function isStale(
+  current: TransactionStatus,
+  target: TransactionStatus,
+): boolean {
+  return SAGA_STAGE[current] >= SAGA_STAGE[target];
+}
+
+/**
+ * Cada markAs* devuelve la transacción tal como quedó. Si el evento era
+ * tardío su estado no será el pedido: el llamador no debe publicar nada.
+ */
 @Injectable()
 export class UpdateTransactionStateService {
   constructor(
@@ -17,8 +42,10 @@ export class UpdateTransactionStateService {
       await this.getTransaction(transactionId);
 
     if (
-      transaction.status ===
-      TransactionStatus.PROCESSING
+      isStale(
+        transaction.status,
+        TransactionStatus.PROCESSING,
+      )
     ) {
       return transaction;
     }
@@ -39,8 +66,10 @@ export class UpdateTransactionStateService {
       await this.getTransaction(transactionId);
 
     if (
-      transaction.status ===
-      TransactionStatus.COMPLETED
+      isStale(
+        transaction.status,
+        TransactionStatus.COMPLETED,
+      )
     ) {
       return transaction;
     }
@@ -62,8 +91,10 @@ export class UpdateTransactionStateService {
       await this.getTransaction(transactionId);
 
     if (
-      transaction.status ===
-      TransactionStatus.FAILED
+      isStale(
+        transaction.status,
+        TransactionStatus.FAILED,
+      )
     ) {
       return transaction;
     }
@@ -85,8 +116,10 @@ export class UpdateTransactionStateService {
       await this.getTransaction(transactionId);
 
     if (
-      transaction.status ===
-      TransactionStatus.COMPENSATING
+      isStale(
+        transaction.status,
+        TransactionStatus.COMPENSATING,
+      )
     ) {
       return transaction;
     }
@@ -107,8 +140,10 @@ export class UpdateTransactionStateService {
       await this.getTransaction(transactionId);
 
     if (
-      transaction.status ===
-      TransactionStatus.COMPENSATED
+      isStale(
+        transaction.status,
+        TransactionStatus.COMPENSATED,
+      )
     ) {
       return transaction;
     }
