@@ -14,21 +14,21 @@ spec:
           ports: [{containerPort: 3003}]
           env:
             - { name: PORT, value: "3003" }
-            - { name: DB_HOST, value: "__HOST_GATEWAY__" }
-            - { name: DB_PORT, value: "5434" }
-            - { name: DB_DATABASE, value: "bank_transaction" }
-            - { name: DB_USERNAME, value: "transaction_user" }
-            - { name: DB_PASSWORD, value: "transaction_password" }
+            - { name: DB_HOST, valueFrom: { configMapKeyRef: { name: bank-db-config, key: TRANSACTION_DB_HOST } } }
+            - { name: DB_PORT, valueFrom: { configMapKeyRef: { name: bank-db-config, key: TRANSACTION_DB_PORT } } }
+            - { name: DB_DATABASE, valueFrom: { configMapKeyRef: { name: bank-db-config, key: TRANSACTION_DB_NAME } } }
+            - { name: DB_USERNAME, valueFrom: { secretKeyRef: { name: bank-db-secret, key: TRANSACTION_DB_USER } } }
+            - { name: DB_PASSWORD, valueFrom: { secretKeyRef: { name: bank-db-secret, key: TRANSACTION_DB_PASSWORD } } }
             - { name: DB_SYNCHRONIZE, value: "true" }
             - { name: RABBITMQ_URL, valueFrom: { secretKeyRef: { name: bank-shared-secret, key: RABBITMQ_URL } } }
             - { name: RABBITMQ_EXCHANGE, value: "bank.events" }
             - { name: RABBITMQ_QUEUE, value: "transaction-service.events" }
             - { name: RABBITMQ_RETRY_EXCHANGE, value: "bank.events.retry" }
             - { name: RABBITMQ_DLX, value: "bank.events.dlx" }
-          readinessProbe:
-            tcpSocket: { port: 3003 }
-            initialDelaySeconds: 8
-            periodSeconds: 5
+          readinessProbe: { httpGet: { path: /health, port: 3003 }, initialDelaySeconds: 5, periodSeconds: 5 }
+          livenessProbe: { httpGet: { path: /health, port: 3003 }, periodSeconds: 10, failureThreshold: 3 }
+          # Hasta 150 s para arrancar (espera a RabbitMQ y la DB); mientras tanto no corre la liveness.
+          startupProbe: { httpGet: { path: /health, port: 3003 }, periodSeconds: 5, failureThreshold: 30 }
 ---
 apiVersion: v1
 kind: Service
