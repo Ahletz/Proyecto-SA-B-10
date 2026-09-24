@@ -66,9 +66,15 @@ function setup() {
   } as unknown as RabbitMqService;
 
   const processed = new Set<string>();
+  // Simula que el servicio se cae después de procesar y antes de marcar.
+  const crash = { beforeNextMark: false };
   const idempotency = {
     hasBeenProcessed: async (eventId: string) => processed.has(eventId),
     markAsProcessed: async (event: BankEvent) => {
+      if (crash.beforeNextMark) {
+        crash.beforeNextMark = false;
+        throw new Error('crash before markAsProcessed');
+      }
       processed.add(event.eventId);
     },
   } as unknown as EventIdempotencyService;
@@ -99,7 +105,7 @@ function setup() {
       ),
     } as ConsumeMessage);
 
-  return { deliver, published, transactions, kyc };
+  return { deliver, published, transactions, kyc, crash };
 }
 
 function transferRequested(requestedBy?: string, correlationId = crypto.randomUUID()) {
@@ -238,5 +244,103 @@ describe('TransactionEventsConsumer - motivo del fallo', () => {
     [undefined, 'PAYMENT_REJECTED'],
   ])('toPaymentFailureReason(%s) = %s', (reason, expected) => {
     expect(toPaymentFailureReason(reason)).toBe(expected);
+  });
+});
+
+describe('TransactionEventsConsumer - idempotencia y correlationId', () => {
+  async function processingTransfer() {
+    const ctx = setup();
+    await ctx.deliver(kycChanged('CUST-1', 'VERIFIED', '2026-09-01T10:00:00.000Z'));
+    await ctx.deliver(transferRequested('CUST-1'));
+    const transaction = [...ctx.transactions.rows.values()][0];
+    const ref = (eventType: string, reason?: string) => ({
+      eventId: crypto.randomUUID(),
+      eventType,
+      correlationId: transaction.correlationId,
+      payload: { transactionId: transaction.transactionId, reason },
+    });
+    await ctx.deliver(ref('account.funds.reserved'));
+    ctx.published.length = 0;
+    return { ...ctx, transaction, ref };
+  }
+
+  it('el mismo eventId entregado dos veces se procesa una sola vez', async () => {
+    const { deliver, published, ref } = await processingTransfer();
+    const completed = ref('account.transfer.completed');
+
+    await deliver(completed);
+    await deliver(completed);
+
+    expect(types(published)).toEqual(['transaction.completed', 'transaction.status.changed']);
+  });
+
+  it('reentrega tras caída antes de marcar: republica con los mismos eventId', async () => {
+    const { deliver, published, crash, ref } = await processingTransfer();
+    const completed = ref('account.transfer.completed');
+
+    crash.beforeNextMark = true;
+    await expect(deliver(completed)).rejects.toThrow('crash before markAsProcessed');
+    const firstIds = published.map((e) => e.eventId);
+    published.length = 0;
+
+    await deliver(completed);
+
+    // Los consumidores descartan la republicación por su propia idempotencia.
+    expect(published.map((e) => e.eventId)).toEqual(firstIds);
+  });
+
+  it('un evento tardío de una etapa anterior se ignora sin fallar ni publicar', async () => {
+    const { deliver, published, transactions, transaction, ref } = await processingTransfer();
+
+    await deliver(ref('account.transfer.completed'));
+    published.length = 0;
+
+    await deliver(ref('account.funds.reserved'));
+    await deliver(ref('account.funds.rejected', 'INSUFFICIENT_FUNDS'));
+
+    expect(published).toEqual([]);
+    const saved = transactions.rows.get(transaction.transactionId)!;
+    expect(saved.status).toBe(TransactionStatus.COMPLETED);
+    expect(saved.failureReason).toBeNull();
+  });
+
+  it('un evento adelantado (payment.rejected antes de funds.reserved) falla para reintentarse', async () => {
+    const ctx = setup();
+    await ctx.deliver(kycChanged('CUST-1', 'VERIFIED', '2026-09-01T10:00:00.000Z'));
+    await ctx.deliver(transferRequested('CUST-1'));
+    const transaction = [...ctx.transactions.rows.values()][0];
+
+    await expect(
+      ctx.deliver({
+        eventType: 'payment.rejected',
+        correlationId: transaction.correlationId,
+        payload: { transactionId: transaction.transactionId, reason: 'TIMEOUT' },
+      }),
+    ).rejects.toThrow();
+  });
+
+  it('todo evento publicado lleva el correlationId de la Saga y el eventId que lo causó', async () => {
+    const { deliver, published, transaction, ref } = await processingTransfer();
+    const rejected = ref('payment.rejected', 'TIMEOUT');
+    const released = ref('account.funds.released');
+
+    await deliver(rejected);
+    await deliver(released);
+
+    expect(types(published)).toEqual(['transaction.compensated', 'transaction.status.changed']);
+    for (const event of published) {
+      expect(event.correlationId).toBe(transaction.correlationId);
+      expect(event.causationId).toBe(released.eventId);
+    }
+  });
+
+  it('transaction.created y el fallo por KYC llevan causationId del transfer.requested', async () => {
+    const { deliver, published } = setup();
+    const requestedId = crypto.randomUUID();
+
+    await deliver({ ...transferRequested('CUST-1'), eventId: requestedId });
+
+    expect(published).not.toHaveLength(0);
+    expect(published.every((e) => e.causationId === requestedId)).toBe(true);
   });
 });

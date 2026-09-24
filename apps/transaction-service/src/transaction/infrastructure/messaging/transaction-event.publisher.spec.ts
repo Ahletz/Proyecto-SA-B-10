@@ -4,7 +4,10 @@ import { BankEvent } from '../../../common/events/bank-event.interface';
 import { Transaction } from '../../domain/entities/transaction.entity';
 import { TransactionStatus } from '../../domain/enums/transaction-status.enum';
 import { RabbitMqService } from './rabbitmq.service';
-import { TransactionEventPublisher } from './transaction-event.publisher';
+import {
+  TransactionEventPublisher,
+  deterministicEventId,
+} from './transaction-event.publisher';
 
 function publisherWithSpy() {
   const published: BankEvent<any>[] = [];
@@ -54,5 +57,40 @@ describe('TransactionEventPublisher - transaction.status.changed', () => {
     ]);
     expect(published[1].payload.estado).toBe('FAILED');
     expect(published[1].eventId).not.toBe(published[0].eventId);
+  });
+});
+
+describe('TransactionEventPublisher - eventId determinista y causationId', () => {
+  it('la misma transición produce siempre el mismo eventId', async () => {
+    const first = publisherWithSpy();
+    const second = publisherWithSpy();
+
+    await first.publisher.publishTransactionCompleted(transaction(TransactionStatus.COMPLETED));
+    await second.publisher.publishTransactionCompleted(transaction(TransactionStatus.COMPLETED));
+
+    expect(first.published.map((e) => e.eventId)).toEqual(second.published.map((e) => e.eventId));
+  });
+
+  it('transiciones distintas producen eventId distintos', async () => {
+    const { publisher, published } = publisherWithSpy();
+
+    await publisher.publishTransactionCreated(transaction(TransactionStatus.PENDING));
+    await publisher.publishTransactionCompleted(transaction(TransactionStatus.COMPLETED));
+
+    expect(new Set(published.map((e) => e.eventId)).size).toBe(4);
+  });
+
+  it('genera UUID válidos (la columna event_id de los consumidores es uuid)', () => {
+    expect(deterministicEventId('t1:transaction.completed:COMPLETED')).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+    );
+  });
+
+  it('propaga causationId al evento de la Saga y a transaction.status.changed', async () => {
+    const { publisher, published } = publisherWithSpy();
+
+    await publisher.publishTransactionFailed(transaction(TransactionStatus.FAILED), 'X', 'cause-1');
+
+    expect(published.map((e) => e.causationId)).toEqual(['cause-1', 'cause-1']);
   });
 });

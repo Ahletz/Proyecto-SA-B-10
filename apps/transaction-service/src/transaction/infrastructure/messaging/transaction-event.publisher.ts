@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { randomUUID } from 'crypto';
+import { createHash } from 'crypto';
 
 import { BankEvent } from '../../../common/events/bank-event.interface';
 import { Transaction } from '../../domain/entities/transaction.entity';
@@ -32,6 +32,32 @@ interface TransactionResultPayload {
   reason?: string;
 }
 
+/**
+ * UUID (formato v5) derivado de la clave: la misma transición de la
+ * misma transacción produce siempre el mismo eventId. Si un evento
+ * entrante se reprocesa (reintento o reentrega), lo que se republique
+ * trae el eventId de la primera vez y los consumidores lo descartan
+ * con su propia idempotencia por eventId.
+ */
+export function deterministicEventId(key: string): string {
+  const hash = createHash('sha1')
+    .update(`bank-usac:${key}`)
+    .digest();
+
+  hash[6] = (hash[6] & 0x0f) | 0x50;
+  hash[8] = (hash[8] & 0x3f) | 0x80;
+
+  const hex = hash.subarray(0, 16).toString('hex');
+
+  return [
+    hex.slice(0, 8),
+    hex.slice(8, 12),
+    hex.slice(12, 16),
+    hex.slice(16, 20),
+    hex.slice(20, 32),
+  ].join('-');
+}
+
 @Injectable()
 export class TransactionEventPublisher {
   constructor(
@@ -40,6 +66,7 @@ export class TransactionEventPublisher {
 
   async publishTransactionCreated(
     transaction: Transaction,
+    causationId?: string,
   ): Promise<void> {
     const event: BankEvent<TransactionCreatedPayload> =
       this.createEvent(
@@ -57,6 +84,7 @@ export class TransactionEventPublisher {
           status:
             transaction.status,
         },
+        causationId,
       );
 
     await this.rabbitMqService.publish(
@@ -64,11 +92,15 @@ export class TransactionEventPublisher {
       event,
     );
 
-    await this.publishStatusChanged(transaction);
+    await this.publishStatusChanged(
+      transaction,
+      causationId,
+    );
   }
 
   async publishTransactionCompleted(
     transaction: Transaction,
+    causationId?: string,
   ): Promise<void> {
     const event: BankEvent<TransactionResultPayload> =
       this.createEvent(
@@ -80,6 +112,7 @@ export class TransactionEventPublisher {
           status:
             transaction.status,
         },
+        causationId,
       );
 
     await this.rabbitMqService.publish(
@@ -87,12 +120,16 @@ export class TransactionEventPublisher {
       event,
     );
 
-    await this.publishStatusChanged(transaction);
+    await this.publishStatusChanged(
+      transaction,
+      causationId,
+    );
   }
 
   async publishTransactionFailed(
     transaction: Transaction,
     reason: string,
+    causationId?: string,
   ): Promise<void> {
     const event: BankEvent<TransactionResultPayload> =
       this.createEvent(
@@ -105,6 +142,7 @@ export class TransactionEventPublisher {
             transaction.status,
           reason,
         },
+        causationId,
       );
 
     await this.rabbitMqService.publish(
@@ -112,11 +150,15 @@ export class TransactionEventPublisher {
       event,
     );
 
-    await this.publishStatusChanged(transaction);
+    await this.publishStatusChanged(
+      transaction,
+      causationId,
+    );
   }
 
   async publishTransactionCompensated(
     transaction: Transaction,
+    causationId?: string,
   ): Promise<void> {
     const event: BankEvent<TransactionResultPayload> =
       this.createEvent(
@@ -130,6 +172,7 @@ export class TransactionEventPublisher {
           reason:
             transaction.failureReason ?? undefined,
         },
+        causationId,
       );
 
     await this.rabbitMqService.publish(
@@ -137,7 +180,10 @@ export class TransactionEventPublisher {
       event,
     );
 
-    await this.publishStatusChanged(transaction);
+    await this.publishStatusChanged(
+      transaction,
+      causationId,
+    );
   }
 
   /**
@@ -146,6 +192,7 @@ export class TransactionEventPublisher {
    */
   private async publishStatusChanged(
     transaction: Transaction,
+    causationId?: string,
   ): Promise<void> {
     const event: BankEvent<TransactionStatusChangedPayload> =
       this.createEvent(
@@ -161,6 +208,7 @@ export class TransactionEventPublisher {
           fecha:
             transaction.updatedAt.toISOString(),
         },
+        causationId,
       );
 
     await this.rabbitMqService.publish(
@@ -173,14 +221,19 @@ export class TransactionEventPublisher {
     eventType: string,
     transaction: Transaction,
     payload: TPayload,
+    causationId?: string,
   ): BankEvent<TPayload> {
     return {
-      eventId: randomUUID(),
+      eventId: deterministicEventId(
+        `${transaction.transactionId}:` +
+          `${eventType}:${transaction.status}`,
+      ),
       eventType,
       version: 1,
       timestamp: new Date().toISOString(),
       correlationId:
         transaction.correlationId,
+      causationId,
       payload,
     };
   }
