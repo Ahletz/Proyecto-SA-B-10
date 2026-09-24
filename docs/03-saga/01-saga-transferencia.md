@@ -53,6 +53,14 @@ Cuando la Saga falla o compensa, el motivo queda en `failure_reason` y se ve en 
 - En el Gateway, reenviar `POST /api/transfers` con el mismo `X-Correlation-Id` es un reintento: Transaction no crea una segunda transacción.
 
 ## Secuencia completa
-![Secuencia](../assets/diagramas/sequence-transfer.png)
+Transferencia exitosa, con la validación KYC, el pago simulado, `transaction.status.changed` y el seguimiento del frontend por `correlationId`:
 
-> Los diagramas de esta página todavía muestran el flujo de Fase 1 (sin validación KYC ni pago simulado); se actualizan en la tarea de UML de secuencia.
+![Secuencia exitosa](../assets/diagramas/sequence-transfer.png)
+
+Fallos y compensación (KYC no verificado, fondos insuficientes y pago rechazado después de la reserva):
+
+![Secuencia de fallo](../assets/diagramas/sequence-transfer-failure.png)
+
+Fuentes Mermaid: `docs/01-arquitectura/c4-src/sequence-transfer.mmd` y `sequence-transfer-failure.mmd`.
+
+> `saga-success.png` y `saga-compensation.png` son la vista general de Fase 1; el detalle de Fase 2 está en las dos secuencias de arriba.
