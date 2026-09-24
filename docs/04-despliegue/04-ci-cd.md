@@ -59,7 +59,7 @@ k8s/
 - **`overlays/dev`** reutiliza la base y la despliega en el namespace `dev` con el componente de autoscaling. El pipeline fija el tag de cada imagen con `kustomize edit set image`.
 - **Configuración de DB:** host, puerto, nombre y usuario de cada base están en el ConfigMap `bank-db-config` y las contraseñas en el Secret `bank-db-secret`, con los nombres de variable de la sección 2.4 del plan (`TRANSACTION_DB_HOST`, …). En producción estos valores vendrán de los outputs de Terraform.
 - **Probes HTTP:** los 7 Deployments tienen `readinessProbe` y `livenessProbe`. Los servicios Node usan `/health` y los Spring Boot (Customer, Notification & Audit) `/actuator/health` y `/actuator/health/liveness`; el frontend usa `/`. Los seis servicios de backend tienen además `startupProbe` (150 s en Node, 180 s en Spring Boot) para esperar a RabbitMQ y la DB. Si un servicio Node pierde la conexión con RabbitMQ, el proceso termina y Kubernetes lo reinicia.
-- **Autoscaling:** los cinco microservicios tienen `requests.cpu: 100m`, `limits.cpu: 500m`, `RollingUpdate` con `maxUnavailable: 0` / `maxSurge: 1` y un HPA (`minReplicas: 1`, `maxReplicas: 5`, 80 % de CPU). El HPA necesita `metrics-server` en el cluster.
+- **Autoscaling:** los cinco microservicios tienen `requests.cpu: 100m`, `limits.cpu: 500m`, `RollingUpdate` con `maxUnavailable: 0` / `maxSurge: 1` y un HPA (`minReplicas: 1`, `maxReplicas: 5`, 80 % de CPU). Los HPA de los servicios Spring Boot (Customer, Notification & Audit) tienen `scaleUp.stabilizationWindowSeconds: 120` para no escalar por el pico de CPU del arranque. El HPA necesita `metrics-server` en el cluster; ver la [prueba de carga](06-prueba-hpa.md).
 
 Renderizar el ambiente dev localmente:
 

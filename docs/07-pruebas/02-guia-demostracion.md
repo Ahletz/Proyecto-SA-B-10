@@ -8,12 +8,15 @@
 5. MailHog por port-forward y correo de activación.
 6. Login/JWT y perfil `VALIDATED/ACTIVE`.
 7. Crear `MONETARY Q1500` y `SAVINGS Q100`.
-8. Transferir Q250 y mostrar `correlationId`.
-9. Consultar estado `COMPLETED` y saldos Q1250/Q350.
-10. Login ADMIN y mostrar auditoría con el mismo `correlationId` en todos los eventos.
-11. Login CASHIER y mostrar pagos; verificar que auditoría no está autorizada.
-12. Ejecutar smoke de roles y fallos de Saga.
-13. Mostrar retry/DLQ, idempotencia y NetworkPolicy.
+8. Intentar transferir antes de verificar el KYC: la transferencia termina `FAILED` con motivo "Cliente sin verificación KYC".
+9. ADMIN verifica el KYC del cliente (`PATCH /api/customers/:customerId/kyc` con `{"status":"VERIFIED"}`).
+10. Transferir Q250 desde **Transferir**: el estado avanza solo hasta **Completada** y los saldos quedan Q1250/Q350.
+11. Abrir **Historial** de la cuenta origen y filtrar por estado.
+12. Login ADMIN y mostrar auditoría con el mismo `correlationId` en todos los eventos.
+13. Login CASHIER y mostrar pagos; verificar que auditoría no está autorizada.
+14. Ejecutar smoke de roles y fallos de Saga.
+15. Mostrar retry/DLQ, idempotencia y NetworkPolicy.
+16. CI/CD: último `CD - Deploy dev` en verde (GitHub Actions) y la imagen `sha-<commit>` en GHCR ([CI/CD](../04-despliegue/04-ci-cd.md)).
 
 ## Evidencias automatizadas
 ```bash
