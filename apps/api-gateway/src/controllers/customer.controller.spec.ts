@@ -2,6 +2,7 @@ import type { ConfigService } from '@nestjs/config';
 import { Reflector } from '@nestjs/core';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ROLES_KEY } from '../auth/roles.decorator';
+import { runWithCorrelationId } from '../correlation/correlation';
 import { CustomerController } from './customer.controller';
 
 const config = { get: (_key: string, fallback: string) => fallback } as unknown as ConfigService;
@@ -27,7 +28,9 @@ describe('CustomerController (Gateway) - KYC', () => {
   it('reenvía el PATCH a Customer Service con el token y el correlationId', async () => {
     const controller = new CustomerController(config);
 
-    await controller.kyc('CUST-7', { status: 'VERIFIED', extra: 'x' } as any, 'Bearer admin', 'corr-1');
+    await runWithCorrelationId('corr-1', () =>
+      controller.kyc('CUST-7', { status: 'VERIFIED', extra: 'x' } as any, 'Bearer admin'),
+    );
 
     expect(calls[0].url).toBe('http://localhost:8081/api/customers/CUST-7/kyc');
     expect(calls[0].init.method).toBe('PATCH');
