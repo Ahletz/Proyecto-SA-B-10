@@ -98,6 +98,7 @@ export class TypeOrmTransactionRepository
     entity.targetAccount = transaction.targetAccount;
     entity.amount = transaction.amount.toString();
     entity.status = transaction.status;
+    entity.failureReason = transaction.failureReason;
     entity.correlationId = transaction.correlationId;
     entity.createdAt = transaction.createdAt;
     entity.updatedAt = transaction.updatedAt;
@@ -117,6 +118,7 @@ export class TypeOrmTransactionRepository
       entity.correlationId,
       entity.createdAt,
       entity.updatedAt,
+      entity.failureReason ?? null,
     );
   }
 }

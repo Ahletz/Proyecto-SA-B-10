@@ -4,5 +4,7 @@ export interface BankEvent<TPayload = unknown> {
   version: number;
   timestamp: string;
   correlationId: string;
+  // eventId del evento que disparó este (contrato 2.1, opcional)
+  causationId?: string;
   payload: TPayload;
 }

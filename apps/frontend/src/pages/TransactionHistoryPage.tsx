@@ -5,6 +5,7 @@ import {
   TransactionHistoryItem,
   TransactionHistoryPage as HistoryPage,
   TransactionStatus,
+  failureReasonLabel,
   fetchTransactionHistory
 } from '../lib/transactions';
 import {useAuthStore} from '../store/authStore';
@@ -277,6 +278,11 @@ export function TransactionHistoryPage(){
                     >
                       {STATUS_LABELS[item.status]}
                     </span>
+                    {item.failureReason&&(
+                      <div className="muted tx-reason" title={item.failureReason}>
+                        {failureReasonLabel(item.failureReason)}
+                      </div>
+                    )}
                   </td>
                   <td title={`correlationId: ${item.correlationId}`}>
                     <code>{shortId(item.transactionId)}</code>
