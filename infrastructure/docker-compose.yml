@@ -76,6 +76,8 @@ services:
   account-service:
     build: { context: ../apps/account-service }
     container_name: bank-account-service
+    # Si se cae la conexión con RabbitMQ el servicio termina; Docker lo vuelve a levantar.
+    restart: unless-stopped
     environment:
       PORT: 3004
       DB_HOST: account-db
@@ -94,6 +96,8 @@ services:
   transaction-service:
     build: { context: ../apps/transaction-service }
     container_name: bank-transaction-service
+    # Si se cae la conexión con RabbitMQ el servicio termina; Docker lo vuelve a levantar.
+    restart: unless-stopped
     environment:
       PORT: 3003
       DB_HOST: transaction-db
@@ -118,6 +122,8 @@ services:
   payment-service:
     build: { context: ../apps/payment-service }
     container_name: bank-payment-service
+    # Si se cae la conexión con RabbitMQ el servicio termina; Docker lo vuelve a levantar.
+    restart: unless-stopped
     environment:
       PORT: 3005
       DB_HOST: payment-db
@@ -163,6 +169,8 @@ services:
   api-gateway:
     build: { context: ../apps/api-gateway }
     container_name: bank-api-gateway
+    # Si se cae la conexión con RabbitMQ el servicio termina; Docker lo vuelve a levantar.
+    restart: unless-stopped
     environment:
       PORT: 8080
       JWT_SECRET: ${JWT_SECRET:-bank-usac-demo-secret-change-before-production-2026}
