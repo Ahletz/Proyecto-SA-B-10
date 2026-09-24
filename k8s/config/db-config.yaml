@@ -1,0 +1,22 @@
+# Conexión a las bases de datos, que corren FUERA del cluster (sección 2.4 del plan).
+# __HOST_GATEWAY__ lo reemplazan start-k8s.sh y cd-dev.yml por la IP del host visto
+# desde kind; en prod el overlay pone las IPs privadas de Cloud SQL (outputs de Terraform).
+apiVersion: v1
+kind: ConfigMap
+metadata: { name: bank-db-config, namespace: bank-usac }
+data:
+  CUSTOMER_DB_HOST: "__HOST_GATEWAY__"
+  CUSTOMER_DB_PORT: "5433"
+  CUSTOMER_DB_NAME: bank_customer
+  ACCOUNT_DB_HOST: "__HOST_GATEWAY__"
+  ACCOUNT_DB_PORT: "5436"
+  ACCOUNT_DB_NAME: bank_account
+  TRANSACTION_DB_HOST: "__HOST_GATEWAY__"
+  TRANSACTION_DB_PORT: "5434"
+  TRANSACTION_DB_NAME: bank_transaction
+  PAYMENT_DB_HOST: "__HOST_GATEWAY__"
+  PAYMENT_DB_PORT: "5437"
+  PAYMENT_DB_NAME: bank_payment
+  NOTIF_DB_HOST: "__HOST_GATEWAY__"
+  NOTIF_DB_PORT: "5435"
+  NOTIF_DB_NAME: bank_notification

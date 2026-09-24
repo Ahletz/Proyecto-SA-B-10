@@ -19,7 +19,7 @@ docker build -t bank-usac/api-gateway:local "$ROOT/apps/api-gateway"
 docker build --build-arg VITE_API_BASE_URL=http://localhost:30080 -t bank-usac/frontend:local "$ROOT/apps/frontend"
 kind load docker-image --name bank-usac bank-usac/customer-service:local bank-usac/account-service:local bank-usac/transaction-service:local bank-usac/payment-service:local bank-usac/notification-audit-service:local bank-usac/api-gateway:local bank-usac/frontend:local
 TMP=$(mktemp -d); cp -a "$ROOT/k8s/." "$TMP/"; grep -RIl '__HOST_GATEWAY__' "$TMP" | xargs -r sed -i "s/__HOST_GATEWAY__/$HOST_GATEWAY/g"
-kubectl apply -f "$TMP/config/namespace.yaml"; kubectl apply -f "$TMP/config/shared-secret.yaml"; kubectl apply -f "$TMP/broker/rabbitmq.yaml"
+kubectl apply -f "$TMP/config/namespace.yaml"; kubectl apply -f "$TMP/config/shared-secret.yaml"; kubectl apply -f "$TMP/config/db-config.yaml"; kubectl apply -f "$TMP/config/db-secret.yaml"; kubectl apply -f "$TMP/broker/rabbitmq.yaml"
 for d in customer-service account-service transaction-service payment-service notification-audit-service api-gateway frontend; do kubectl apply -f "$TMP/$d/deployment.yaml"; done
 kubectl apply -f "$TMP/config/network-policy.yaml" || true
 for d in rabbitmq customer-service account-service transaction-service payment-service notification-audit-service api-gateway frontend; do kubectl -n bank-usac rollout status deployment/$d --timeout=240s; done
