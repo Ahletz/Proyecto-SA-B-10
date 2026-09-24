@@ -46,6 +46,14 @@ export class TransactionOrmEntity {
   status: TransactionStatus;
 
   @Column({
+    name: 'failure_reason',
+    type: 'varchar',
+    length: 60,
+    nullable: true,
+  })
+  failureReason: string | null;
+
+  @Column({
     name: 'correlation_id',
     type: 'uuid',
     unique: true,

@@ -127,6 +127,8 @@ export class TransactionEventPublisher {
             transaction.transactionId,
           status:
             transaction.status,
+          reason:
+            transaction.failureReason ?? undefined,
         },
       );
 

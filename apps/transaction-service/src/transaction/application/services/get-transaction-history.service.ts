@@ -27,6 +27,7 @@ export interface TransactionHistoryItem {
   amount: number;
   status: PublicTransactionStatus;
   detailedStatus: TransactionStatus;
+  failureReason: string | null;
   correlationId: string;
   createdAt: Date;
   updatedAt: Date;
@@ -76,6 +77,7 @@ export class GetTransactionHistoryService {
         amount: t.amount,
         status: toPublicStatus(t.status),
         detailedStatus: t.status,
+        failureReason: t.failureReason,
         correlationId: t.correlationId,
         createdAt: t.createdAt,
         updatedAt: t.updatedAt,

@@ -10,6 +10,7 @@ export class Transaction {
     public readonly correlationId: string,
     public readonly createdAt: Date,
     private _updatedAt: Date,
+    private _failureReason: string | null = null,
   ) {
     if (!transactionId) {
       throw new Error('transactionId is required');
@@ -44,6 +45,11 @@ export class Transaction {
     return this._updatedAt;
   }
 
+  /** Motivo del fallo o de la compensación; null mientras la Saga no falle. */
+  get failureReason(): string | null {
+    return this._failureReason;
+  }
+
   markAsProcessing(): void {
     this.ensureStatus(TransactionStatus.PENDING);
 
@@ -58,7 +64,7 @@ export class Transaction {
     this.touch();
   }
 
-  markAsFailed(): void {
+  markAsFailed(reason?: string): void {
     if (
       this._status !== TransactionStatus.PENDING &&
       this._status !== TransactionStatus.PROCESSING
@@ -69,13 +75,15 @@ export class Transaction {
     }
 
     this._status = TransactionStatus.FAILED;
+    this._failureReason = reason ?? this._failureReason;
     this.touch();
   }
 
-  markAsCompensating(): void {
+  markAsCompensating(reason?: string): void {
     this.ensureStatus(TransactionStatus.PROCESSING);
 
     this._status = TransactionStatus.COMPENSATING;
+    this._failureReason = reason ?? this._failureReason;
     this.touch();
   }
 

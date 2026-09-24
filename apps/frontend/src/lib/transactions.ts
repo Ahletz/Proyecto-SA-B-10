@@ -10,6 +10,7 @@ export interface TransactionHistoryItem{
   amount:number;
   status:TransactionStatus;
   detailedStatus:string;
+  failureReason?:string|null;
   correlationId:string;
   createdAt:string;
   updatedAt:string;
@@ -62,4 +63,20 @@ export function fetchTransactionHistory(
   filters:TransactionHistoryFilters
 ):Promise<TransactionHistoryPage>{
   return api(`/api/transactions?${buildHistoryQuery(filters)}`);
+}
+
+// Motivos que guarda Transaction Service cuando la Saga falla o compensa.
+const FAILURE_REASON_LABELS:Record<string,string>={
+  KYC_NOT_VERIFIED:'Cliente sin verificación KYC',
+  INSUFFICIENT_FUNDS:'Fondos insuficientes',
+  ACCOUNT_NOT_FOUND_OR_INACTIVE:'Cuenta inexistente o inactiva',
+  PAYMENT_TIMEOUT:'El procesador de pagos no respondió',
+  PAYMENT_EXTERNAL_FAILURE:'Rechazada por el procesador de pagos',
+  PAYMENT_LIMIT_EXCEEDED:'Monto sobre el límite de pago',
+  PAYMENT_INVALID_AMOUNT:'Monto inválido',
+  PAYMENT_REJECTED:'Pago rechazado'
+};
+
+export function failureReasonLabel(reason:string){
+  return FAILURE_REASON_LABELS[reason]??reason;
 }

@@ -56,6 +56,7 @@ export class UpdateTransactionStateService {
 
   async markAsFailed(
     transactionId: string,
+    reason?: string,
   ): Promise<Transaction> {
     const transaction =
       await this.getTransaction(transactionId);
@@ -67,7 +68,7 @@ export class UpdateTransactionStateService {
       return transaction;
     }
 
-    transaction.markAsFailed();
+    transaction.markAsFailed(reason);
 
     await this.transactionRepository.save(
       transaction,
@@ -78,6 +79,7 @@ export class UpdateTransactionStateService {
 
   async markAsCompensating(
     transactionId: string,
+    reason?: string,
   ): Promise<Transaction> {
     const transaction =
       await this.getTransaction(transactionId);
@@ -89,7 +91,7 @@ export class UpdateTransactionStateService {
       return transaction;
     }
 
-    transaction.markAsCompensating();
+    transaction.markAsCompensating(reason);
 
     await this.transactionRepository.save(
       transaction,

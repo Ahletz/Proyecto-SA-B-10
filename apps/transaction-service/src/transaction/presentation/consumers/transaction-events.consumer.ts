@@ -9,6 +9,8 @@ import type { ConsumeMessage } from 'amqplib';
 import { BankEvent } from '../../../common/events/bank-event.interface';
 import { CreateTransactionService } from '../../application/services/create-transaction.service';
 import { UpdateTransactionStateService } from '../../application/services/update-transaction-state.service';
+import { CustomerKycService } from '../../application/services/customer-kyc.service';
+import { TransactionStatus } from '../../domain/enums/transaction-status.enum';
 import { RabbitMqService } from '../../infrastructure/messaging/rabbitmq.service';
 import { TransactionEventPublisher } from '../../infrastructure/messaging/transaction-event.publisher';
 import { EventIdempotencyService } from '../../infrastructure/messaging/event-idempotency.service';
@@ -17,6 +19,8 @@ interface TransferRequestedPayload {
   sourceAccount: string;
   targetAccount: string;
   amount: number;
+  // customerId del cliente autenticado (lo agrega el Gateway)
+  requestedBy?: string;
 }
 
 interface TransactionReferencePayload {
@@ -24,9 +28,36 @@ interface TransactionReferencePayload {
   reason?: string;
 }
 
+// Contrato Fase 2 (sección 2.2): lo publica Customer Service.
+interface KycStatusChangedPayload {
+  customerId: string;
+  estadoAnterior?: string;
+  estadoNuevo: string;
+}
+
 type TransactionEventPayload =
   | TransferRequestedPayload
-  | TransactionReferencePayload;
+  | TransactionReferencePayload
+  | KycStatusChangedPayload;
+
+export const KYC_NOT_VERIFIED = 'KYC_NOT_VERIFIED';
+
+/**
+ * Payment manda motivos propios (TIMEOUT, EXTERNAL_FAILURE, ...).
+ * En Transaction se guardan con prefijo PAYMENT_ para que en el
+ * historial se distinga qué participante de la Saga falló.
+ */
+export function toPaymentFailureReason(
+  reason: string | undefined,
+): string {
+  if (!reason) {
+    return 'PAYMENT_REJECTED';
+  }
+
+  return reason.startsWith('PAYMENT_')
+    ? reason
+    : `PAYMENT_${reason}`;
+}
 
 @Injectable()
 export class TransactionEventsConsumer
@@ -52,6 +83,9 @@ export class TransactionEventsConsumer
 
     private readonly eventIdempotencyService:
       EventIdempotencyService,
+
+    private readonly customerKycService:
+      CustomerKycService,
   ) {}
 
   async onModuleInit(): Promise<void> {
@@ -68,6 +102,8 @@ export class TransactionEventsConsumer
         'account.transfer.failed',
 
         'account.funds.released',
+
+        'customer.kyc.status.changed',
       ],
       async (message) => {
         await this.handleMessage(message);
@@ -151,6 +187,12 @@ export class TransactionEventsConsumer
         );
         break;
 
+      case 'customer.kyc.status.changed':
+        await this.handleKycStatusChanged(
+          event as BankEvent<KycStatusChangedPayload>,
+        );
+        break;
+
       default:
         throw new Error(
           `Unsupported event: ${event.eventType}`,
@@ -182,6 +224,47 @@ export class TransactionEventsConsumer
             event.correlationId,
         });
 
+    // Reintento de un evento cuya Saga ya avanzó: no se vuelve a decidir.
+    if (
+      transaction.status !==
+      TransactionStatus.PENDING
+    ) {
+      this.logger.warn(
+        `Transaction ${transaction.transactionId} ` +
+          `already ${transaction.status}, skipping`,
+      );
+
+      return;
+    }
+
+    const kycVerified =
+      await this.customerKycService.isVerified(
+        event.payload.requestedBy,
+      );
+
+    if (!kycVerified) {
+      const failed =
+        await this.updateTransactionStateService
+          .markAsFailed(
+            transaction.transactionId,
+            KYC_NOT_VERIFIED,
+          );
+
+      await this.transactionEventPublisher
+        .publishTransactionFailed(
+          failed,
+          KYC_NOT_VERIFIED,
+        );
+
+      this.logger.warn(
+        `Transaction ${transaction.transactionId} ` +
+          `FAILED: customer ${event.payload.requestedBy ?? '<unknown>'} ` +
+          `is not KYC VERIFIED`,
+      );
+
+      return;
+    }
+
     await this.transactionEventPublisher
       .publishTransactionCreated(
         transaction,
@@ -189,6 +272,29 @@ export class TransactionEventsConsumer
 
     this.logger.log(
       `Transaction ${transaction.transactionId} created`,
+    );
+  }
+
+  private async handleKycStatusChanged(
+    event: BankEvent<KycStatusChangedPayload>,
+  ): Promise<void> {
+    const changedAt = new Date(event.timestamp);
+
+    const applied =
+      await this.customerKycService
+        .applyStatusChange(
+          event.payload.customerId,
+          event.payload.estadoNuevo,
+          Number.isNaN(changedAt.getTime())
+            ? new Date()
+            : changedAt,
+        );
+
+    this.logger.log(
+      `KYC of ${event.payload.customerId} ` +
+        (applied
+          ? `is now ${event.payload.estadoNuevo}`
+          : `unchanged (stale event)`),
     );
   }
 
@@ -214,17 +320,21 @@ export class TransactionEventsConsumer
   ): Promise<void> {
     this.validateTransactionReference(event);
 
+    const reason =
+      event.payload.reason ??
+      'FUNDS_REJECTED';
+
     const transaction =
       await this.updateTransactionStateService
         .markAsFailed(
           event.payload.transactionId,
+          reason,
         );
 
     await this.transactionEventPublisher
       .publishTransactionFailed(
         transaction,
-        event.payload.reason ??
-          'FUNDS_REJECTED',
+        reason,
       );
   }
 
@@ -237,11 +347,14 @@ export class TransactionEventsConsumer
       await this.updateTransactionStateService
         .markAsCompensating(
           event.payload.transactionId,
+          toPaymentFailureReason(
+            event.payload.reason,
+          ),
         );
 
     this.logger.warn(
       `Transaction ${transaction.transactionId} ` +
-        `is COMPENSATING`,
+        `is COMPENSATING (${transaction.failureReason})`,
     );
   }
 
@@ -267,17 +380,21 @@ export class TransactionEventsConsumer
   ): Promise<void> {
     this.validateTransactionReference(event);
 
+    const reason =
+      event.payload.reason ??
+      'TRANSFER_FAILED';
+
     const transaction =
       await this.updateTransactionStateService
         .markAsFailed(
           event.payload.transactionId,
+          reason,
         );
 
     await this.transactionEventPublisher
       .publishTransactionFailed(
         transaction,
-        event.payload.reason ??
-          'TRANSFER_FAILED',
+        reason,
       );
   }
 

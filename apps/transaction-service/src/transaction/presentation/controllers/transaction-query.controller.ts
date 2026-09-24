@@ -23,13 +23,13 @@ export class TransactionQueryController {
   async byCorrelation(@Param('correlationId') correlationId: string) {
     const t = await this.repository.findByCorrelationId(correlationId);
     if (!t) throw new NotFoundException('Transaction not found');
-    return { transactionId:t.transactionId, sourceAccount:t.sourceAccount, targetAccount:t.targetAccount, amount:t.amount, status:t.status, correlationId:t.correlationId, createdAt:t.createdAt, updatedAt:t.updatedAt };
+    return { transactionId:t.transactionId, sourceAccount:t.sourceAccount, targetAccount:t.targetAccount, amount:t.amount, status:t.status, failureReason:t.failureReason, correlationId:t.correlationId, createdAt:t.createdAt, updatedAt:t.updatedAt };
   }
   @Get(':transactionId')
   async byId(@Param('transactionId') transactionId: string) {
     const t = await this.repository.findById(transactionId);
     if (!t) throw new NotFoundException('Transaction not found');
-    return { transactionId:t.transactionId, sourceAccount:t.sourceAccount, targetAccount:t.targetAccount, amount:t.amount, status:t.status, correlationId:t.correlationId, createdAt:t.createdAt, updatedAt:t.updatedAt };
+    return { transactionId:t.transactionId, sourceAccount:t.sourceAccount, targetAccount:t.targetAccount, amount:t.amount, status:t.status, failureReason:t.failureReason, correlationId:t.correlationId, createdAt:t.createdAt, updatedAt:t.updatedAt };
   }
 }
 
