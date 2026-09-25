@@ -67,6 +67,6 @@ La segunda fase amplía la solución con:
 
 ![C4 contenedores](assets/diagramas/c4-container.png)
 
-![Deployment](assets/diagramas/uml-deployment.png)
+![Despliegue Fase 2](assets/diagramas/deployment-fase2.png)
 
 ![Saga](assets/diagramas/saga-success.png)
