@@ -1,9 +1,15 @@
 name: CD - Deploy dev
 
-# Merge a develop: construye y publica las imágenes (tag sha-<commit>) en GHCR
-# y las despliega en el namespace `dev` de un cluster kind efímero, donde corre
-# el smoke test end-to-end (reusable-kind-smoke.yml). Las bases de datos corren
+# Merge a develop: publica las imágenes (tag sha-<commit>) en GHCR y las
+# despliega en el namespace `dev` de un cluster kind efímero, donde corre el
+# smoke test end-to-end (reusable-kind-smoke.yml). Las bases de datos corren
 # FUERA del cluster, igual que en scripts/project/start-k8s.sh.
+#
+# Build selectivo (monorepo): solo se construyen los servicios cuya carpeta
+# apps/<servicio>/ cambió en el push. Los demás se reetiquetan desde la imagen
+# del commit anterior (sha-<before>) sin recompilar: mismo digest, así cada
+# commit sigue teniendo las 7 imágenes con el mismo tag. Con workflow_dispatch,
+# en el primer push o si falta la imagen anterior, se construye todo.
 
 on:
   push:
@@ -19,36 +25,104 @@ concurrency:
   group: cd-dev
   cancel-in-progress: false
 
-jobs:
-  images:
-    name: Build image - ${{ matrix.service }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    outputs:
-      tag: ${{ steps.meta.outputs.tag }}
-      prefix: ${{ steps.meta.outputs.prefix }}
+env:
+  SERVICES: >-
+    customer-service account-service transaction-service payment-service
+    notification-audit-service api-gateway frontend
 
-    strategy:
-      fail-fast: true
-      matrix:
-        service:
-          - customer-service
-          - account-service
-          - transaction-service
-          - payment-service
-          - notification-audit-service
-          - api-gateway
-          - frontend
+jobs:
+  plan:
+    name: Detect changed services
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      prefix: ${{ steps.plan.outputs.prefix }}
+      tag: ${{ steps.plan.outputs.tag }}
+      build: ${{ steps.plan.outputs.build }}
+      reuse: ${{ steps.plan.outputs.reuse }}
+      previous: ${{ steps.plan.outputs.previous }}
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Image metadata
-        id: meta
+      - name: Detect changes per service
+        id: filter
+        if: github.event_name == 'push'
+        uses: dorny/paths-filter@v3
+        with:
+          base: ${{ github.ref_name }}
+          filters: |
+            customer-service: 'apps/customer-service/**'
+            account-service: 'apps/account-service/**'
+            transaction-service: 'apps/transaction-service/**'
+            payment-service: 'apps/payment-service/**'
+            notification-audit-service: 'apps/notification-audit-service/**'
+            api-gateway: 'apps/api-gateway/**'
+            frontend: 'apps/frontend/**'
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Plan builds
+        id: plan
+        env:
+          EVENT: ${{ github.event_name }}
+          BEFORE: ${{ github.event.before }}
+          CHANGED: ${{ steps.filter.outputs.changes || '[]' }}
         run: |
-          echo "prefix=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/bank-usac" >> "$GITHUB_OUTPUT"
-          echo "tag=sha-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+          prefix="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/bank-usac"
+          tag="sha-${GITHUB_SHA::7}"
+          previous=""
+          if [[ "$EVENT" == push && -n "$BEFORE" && ! "$BEFORE" =~ ^0+$ ]]; then
+            previous="sha-${BEFORE::7}"
+          fi
+
+          build=(); reuse=()
+          for s in $SERVICES; do
+            if [[ -z "$previous" ]] || jq -e --arg s "$s" 'any(.[]; . == $s)' <<<"$CHANGED" >/dev/null; then
+              build+=("$s")
+            elif docker buildx imagetools inspect "$prefix/$s:$previous" >/dev/null 2>&1; then
+              reuse+=("$s")
+            else
+              echo "::notice::$s no tiene imagen $previous; se construye"
+              build+=("$s")
+            fi
+          done
+
+          {
+            echo "prefix=$prefix"
+            echo "tag=$tag"
+            echo "previous=$previous"
+            echo "build=$(printf '%s\n' "${build[@]}" | jq -Rsc 'split("\n") | map(select(. != ""))')"
+            echo "reuse=${reuse[*]}"
+          } >> "$GITHUB_OUTPUT"
+
+          {
+            echo "### Build selectivo ($tag)"
+            echo "- Se construyen: ${build[*]:-ninguno}"
+            echo "- Se reutilizan desde ${previous:-—}: ${reuse[*]:-ninguno}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  images:
+    name: Build image - ${{ matrix.service }}
+    needs: plan
+    if: needs.plan.outputs.build != '[]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    strategy:
+      fail-fast: true
+      matrix:
+        service: ${{ fromJSON(needs.plan.outputs.build) }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -65,16 +139,48 @@ jobs:
         with:
           context: apps/${{ matrix.service }}
           push: true
-          tags: ${{ steps.meta.outputs.prefix }}/${{ matrix.service }}:${{ steps.meta.outputs.tag }}
+          tags: ${{ needs.plan.outputs.prefix }}/${{ matrix.service }}:${{ needs.plan.outputs.tag }}
           build-args: |
             VITE_API_BASE_URL=http://localhost:30080
           cache-from: type=gha,scope=${{ matrix.service }}
           cache-to: type=gha,mode=max,scope=${{ matrix.service }}
 
+  reuse-images:
+    name: Reuse unchanged images
+    needs: plan
+    if: needs.plan.outputs.reuse != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Retag previous images (same digest, no build)
+        env:
+          PREFIX: ${{ needs.plan.outputs.prefix }}
+          TAG: ${{ needs.plan.outputs.tag }}
+          PREVIOUS: ${{ needs.plan.outputs.previous }}
+          REUSE: ${{ needs.plan.outputs.reuse }}
+        run: |
+          for s in $REUSE; do
+            echo "$s: $PREVIOUS -> $TAG"
+            docker buildx imagetools create -t "$PREFIX/$s:$TAG" "$PREFIX/$s:$PREVIOUS"
+          done
+
   deploy-dev:
     name: Deploy dev
-    needs: images
+    needs: [plan, images, reuse-images]
+    # images o reuse-images pueden omitirse; el deploy corre si ninguno falló.
+    if: ${{ !failure() && !cancelled() }}
     uses: ./.github/workflows/reusable-kind-smoke.yml
     with:
-      prefix: ${{ needs.images.outputs.prefix }}
-      tag: ${{ needs.images.outputs.tag }}
+      prefix: ${{ needs.plan.outputs.prefix }}
+      tag: ${{ needs.plan.outputs.tag }}
