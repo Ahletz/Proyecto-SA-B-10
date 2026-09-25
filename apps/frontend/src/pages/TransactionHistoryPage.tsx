@@ -77,6 +77,8 @@ export function TransactionHistoryPage(){
         }
       })
       .catch(e=>setError(e instanceof Error?e.message:String(e)));
+  // Solo al cambiar de rol: accountId se lee para no pisar el que vino por ?accountId=.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   },[isClient]);
 
   const load=useCallback(async(targetPage:number)=>{
@@ -120,6 +122,8 @@ export function TransactionHistoryPage(){
     if(isClient||(accountId&&accountId===initialAccountId&&!result)){
       void load(1);
     }
+  // A propósito sin load/result: los filtros se aplican con Buscar, no en cada cambio.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   },[accountId,isClient]);
 
   const totalPages=result
