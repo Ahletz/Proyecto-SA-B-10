@@ -6,7 +6,7 @@ Pipeline en GitHub Actions que sigue la convención de ramas y tags del enunciad
 
 | Evento | Workflow | Qué hace |
 | ------ | -------- | -------- |
-| Push a `feature/**` | `integrante1-ci.yml`, `integrante3-ci.yml` | Build + test (+ lint) de los servicios que cambiaron, prueba de `docker build` y validación de manifiestos |
+| Push a `feature/**` | `integrante1-ci.yml`, `integrante2-ci.yml`, `integrante3-ci.yml` | Build + test (+ lint) de los servicios que cambiaron, prueba de `docker build` y validación de manifiestos |
 | Pull request `feature/*` → `develop` | Los mismos | Repite build + test; si pasa, se puede hacer merge |
 | Merge a `develop` | `cd-dev.yml` | Construye y publica las 7 imágenes con tag `sha-<commit>`, las despliega en el namespace `dev` y corre el smoke test end-to-end |
 | Push a `release/X.Y.Z` | `release.yml` | Publica imágenes candidatas, las valida con el smoke test y solo entonces publica las imágenes finales `vX.Y.Z` y crea el tag git `vX.Y.Z` |
@@ -17,6 +17,7 @@ Pipeline en GitHub Actions que sigue la convención de ramas y tags del enunciad
 | Archivo | Tipo | Uso |
 | ------- | ---- | --- |
 | `integrante1-ci.yml` | CI | Customer, Notification & Audit y Frontend |
+| `integrante2-ci.yml` | CI | Account y Payment (NestJS) |
 | `integrante3-ci.yml` | CI | Transaction, API Gateway y manifiestos `k8s/` |
 | `reusable-node-ci.yml` | Reutilizable | Build + test (+ lint) de un servicio Node/NestJS |
 | `cd-dev.yml` | CD | Imágenes `sha-<commit>` + despliegue en `dev` |
@@ -40,7 +41,7 @@ jobs:
 
 El workflow reutilizable instala con `npm ci`, ejecuta lint/test según los inputs, compila con `npm run build` y, en los push, verifica que la imagen Docker construya.
 
-`integrante3-ci.yml` cubre Transaction Service, API Gateway y los manifiestos de `k8s/`. Los manifiestos se renderizan con Kustomize, se validan con kubeconform y se rechaza cualquier imagen `:latest`.
+`integrante2-ci.yml` cubre Account y Payment con el mismo workflow reutilizable (solo el código NestJS que se despliega; el código Java paralelo de esas carpetas no se compila). `integrante3-ci.yml` cubre Transaction Service, API Gateway y los manifiestos de `k8s/`. Los manifiestos se renderizan con Kustomize, se validan con kubeconform y se rechaza cualquier imagen `:latest`.
 
 ## Manifiestos Kubernetes (Kustomize)
 
