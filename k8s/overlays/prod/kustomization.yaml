@@ -1,0 +1,42 @@
+# Ambiente prod (GKE): lo despliega .github/workflows/cd-prod.yml en cada merge a main,
+# con las imágenes vX.Y.Z publicadas por release.yml (nunca latest).
+#
+# - DB: Cloud SQL fuera del cluster (Terraform de Integrante 2). cd-prod.yml reemplaza
+#   __<SERVICIO>_DB_HOST__ con las IP privadas (output db_private_ips) y crea el Secret
+#   bank-db-secret desde los secretos de GitHub; aquí no hay credenciales.
+# - El frontend no corre en el cluster: va en Cloud Run/VM (sección 1 del plan) y
+#   consume el Gateway por su LoadBalancer.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: prod
+resources:
+  - namespace.yaml
+  - ../../base
+components:
+  - ../../components/autoscaling
+patches:
+  - path: db-config.yaml
+  - path: gateway-service.yaml
+  - patch: |-
+      $patch: delete
+      apiVersion: v1
+      kind: Secret
+      metadata: { name: bank-db-secret, namespace: bank-usac }
+  - patch: |-
+      $patch: delete
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata: { name: frontend, namespace: bank-usac }
+  - patch: |-
+      $patch: delete
+      apiVersion: v1
+      kind: Service
+      metadata: { name: frontend, namespace: bank-usac }
+# cd-prod.yml fija el tag con `kustomize edit set image` antes de aplicar.
+images:
+  - { name: bank-usac/customer-service, newName: ghcr.io/ahletz/bank-usac/customer-service, newTag: v0.0.0 }
+  - { name: bank-usac/account-service, newName: ghcr.io/ahletz/bank-usac/account-service, newTag: v0.0.0 }
+  - { name: bank-usac/transaction-service, newName: ghcr.io/ahletz/bank-usac/transaction-service, newTag: v0.0.0 }
+  - { name: bank-usac/payment-service, newName: ghcr.io/ahletz/bank-usac/payment-service, newTag: v0.0.0 }
+  - { name: bank-usac/notification-audit-service, newName: ghcr.io/ahletz/bank-usac/notification-audit-service, newTag: v0.0.0 }
+  - { name: bank-usac/api-gateway, newName: ghcr.io/ahletz/bank-usac/api-gateway, newTag: v0.0.0 }

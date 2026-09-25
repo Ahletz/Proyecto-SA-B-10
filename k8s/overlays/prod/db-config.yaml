@@ -1,0 +1,16 @@
+# Cloud SQL (PostgreSQL 17) por IP privada en la VPC bank-usac-vpc; puerto estándar.
+# Nombres de base iguales a infrastructure/terraform/cloudsql.tf.
+apiVersion: v1
+kind: ConfigMap
+metadata: { name: bank-db-config, namespace: bank-usac }
+data:
+  CUSTOMER_DB_HOST: "__CUSTOMER_DB_HOST__"
+  CUSTOMER_DB_PORT: "5432"
+  ACCOUNT_DB_HOST: "__ACCOUNT_DB_HOST__"
+  ACCOUNT_DB_PORT: "5432"
+  TRANSACTION_DB_HOST: "__TRANSACTION_DB_HOST__"
+  TRANSACTION_DB_PORT: "5432"
+  PAYMENT_DB_HOST: "__PAYMENT_DB_HOST__"
+  PAYMENT_DB_PORT: "5432"
+  NOTIF_DB_HOST: "__NOTIFICATION_DB_HOST__"
+  NOTIF_DB_PORT: "5432"
