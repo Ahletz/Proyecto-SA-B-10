@@ -42,6 +42,8 @@ jobs:
 
 El workflow reutilizable instala con `npm ci`, ejecuta lint/test según los inputs, compila con `npm run build` y, en los push, verifica que la imagen Docker construya.
 
+En `integrante1-ci.yml`, el job de Frontend corre `type-check`, `lint` (ESLint con `--max-warnings 0`: cualquier aviso falla el job) y `build`.
+
 `integrante2-ci.yml` cubre Account y Payment con el mismo workflow reutilizable (NestJS). `integrante3-ci.yml` cubre Transaction Service, API Gateway y los manifiestos de `k8s/`. Los overlays `dev` y `prod` se renderizan con Kustomize, se validan con kubeconform y se rechaza cualquier imagen `:latest`.
 
 ## Manifiestos Kubernetes (Kustomize)
