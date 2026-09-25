@@ -64,7 +64,17 @@ k8s/
 - **`overlays/dev`** reutiliza la base y la despliega en el namespace `dev` con el componente de autoscaling. El pipeline fija el tag de cada imagen con `kustomize edit set image`.
 - **Configuración de DB:** host, puerto, nombre y usuario de cada base están en el ConfigMap `bank-db-config` y las contraseñas en el Secret `bank-db-secret`, con los nombres de variable de la sección 2.4 del plan (`TRANSACTION_DB_HOST`, …). En producción estos valores vendrán de los outputs de Terraform.
 - **Probes HTTP:** los 7 Deployments tienen `readinessProbe` y `livenessProbe`. Los servicios Node usan `/health` y los Spring Boot (Customer, Notification & Audit) `/actuator/health` y `/actuator/health/liveness`; el frontend usa `/`. Los seis servicios de backend tienen además `startupProbe` (150 s en Node, 180 s en Spring Boot) para esperar a RabbitMQ y la DB. Si un servicio Node pierde la conexión con RabbitMQ, el proceso termina y Kubernetes lo reinicia.
-- **Autoscaling:** los cinco microservicios tienen `requests.cpu: 100m`, `limits.cpu: 500m`, `RollingUpdate` con `maxUnavailable: 0` / `maxSurge: 1` y un HPA (`minReplicas: 1`, `maxReplicas: 5`, 80 % de CPU). Los HPA de los servicios Spring Boot (Customer, Notification & Audit) tienen `scaleUp.stabilizationWindowSeconds: 120` para no escalar por el pico de CPU del arranque. El HPA necesita `metrics-server` en el cluster; ver la [prueba de carga](06-prueba-hpa.md).
+- **Recursos:** todos los contenedores tienen requests y limits de CPU y memoria, ajustados al uso medido con `docker stats` después del smoke test:
+
+  | Contenedor | Requests | Limits |
+  | ---------- | -------- | ------ |
+  | Account, Transaction, Payment, API Gateway (NestJS, ~45 MiB en uso) | `100m` / `96Mi` | `500m` / `256Mi` |
+  | Customer, Notification & Audit (Spring Boot) | `100m` / `384Mi` | `500m` / `768Mi` |
+  | RabbitMQ (~218 MiB en uso) | `100m` / `256Mi` | `500m` / `1Gi` |
+  | Frontend / MailHog | `10m` / `48Mi` · `10m` / `32Mi` | `200m` / `128Mi` · `100m` / `64Mi` |
+
+  Los servicios Spring Boot llevan `JAVA_TOOL_OPTIONS=-XX:MaxRAMPercentage=70`: la JVM limita el heap a ~537 MiB y deja margen para metaspace e hilos dentro de los 768 MiB. RabbitMQ tiene 1Gi de límite porque su alarma de memoria bloquea a los publicadores al 40 % del límite. Los valores de los cinco microservicios están en `components/autoscaling` (`resources-node.yaml`, `resources-spring.yaml`); los de Gateway, RabbitMQ, MailHog y frontend, en su `deployment.yaml`.
+- **Autoscaling:** los cinco microservicios tienen `RollingUpdate` con `maxUnavailable: 0` / `maxSurge: 1` y un HPA (`minReplicas: 1`, `maxReplicas: 5`, 80 % de CPU). Los HPA de los servicios Spring Boot (Customer, Notification & Audit) tienen `scaleUp.stabilizationWindowSeconds: 120` para no escalar por el pico de CPU del arranque. El HPA necesita `metrics-server` en el cluster; ver la [prueba de carga](06-prueba-hpa.md).
 
 Renderizar el ambiente dev localmente:
 
