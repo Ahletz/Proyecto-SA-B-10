@@ -22,7 +22,8 @@ Todos los PNG están en `docs/assets/diagramas/`. Los editables correspondientes
 | Secuencia creación cuenta | `sequence-create-account.png` |
 | Retry/DLQ | `retry-dlq-flow.png` |
 | Observabilidad | `observability-correlation.png` |
-| UML Deployment | `uml-deployment.png` |
+| Despliegue Fase 2 (dev kind + prod GCP) | `deployment-fase2.png` (fuente: [`c4-src/deployment.mmd`](c4-src/deployment.mmd)) |
+| UML Deployment (Fase 1, kind local) | `uml-deployment.png` |
 | UML casos de uso | `uml-use-cases.png` |
 | Arranque | `startup-flow.png` |
 | Flujo de demostración | `demo-flow.png` |
@@ -35,7 +36,7 @@ Todos los PNG están en `docs/assets/diagramas/`. Los editables correspondientes
 
 ![Eventos](../assets/diagramas/event-topology.png)
 
-![Deployment](../assets/diagramas/uml-deployment.png)
+![Despliegue Fase 2](../assets/diagramas/deployment-fase2.png)
 
 ## Actualización Fase 2 — Integrante 1
 

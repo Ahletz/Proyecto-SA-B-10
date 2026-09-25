@@ -25,4 +25,11 @@ Todo lo crea Terraform (`infrastructure/terraform`), dentro de la VPC **`bank-us
 - Cada microservicio accede únicamente a su propia base de datos.
 - Producción no se toca a mano: solo `cd-prod.yml` despliega, con imágenes versionadas (nunca `latest`).
 
-![Diagrama de Despliegue](uml/diagrama_despliegue.png)
+![Diagrama de Despliegue](../assets/diagramas/deployment-fase2.png)
+
+Fuente Mermaid: [`c4-src/deployment.mmd`](../01-arquitectura/c4-src/deployment.mmd). Para regenerar el PNG:
+
+```bash
+docker run --rm -u "$(id -u):$(id -g)" -v "$PWD/docs":/data minlag/mermaid-cli \
+  -i /data/01-arquitectura/c4-src/deployment.mmd -o /data/assets/diagramas/deployment-fase2.png -s 4 -b white
+```

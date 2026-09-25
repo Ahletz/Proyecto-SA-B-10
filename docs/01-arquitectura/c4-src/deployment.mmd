@@ -1,0 +1,72 @@
+---
+title: Diagrama de despliegue — Bank USAC (Fase 2)
+config:
+  layout: elk
+  flowchart:
+    wrappingWidth: 260
+---
+flowchart LR
+    cliente["👤 Cliente<br>navegador"]
+
+    subgraph cicd["CI/CD — GitHub"]
+        direction TB
+        actions["GitHub Actions<br>CI por integrante · cd-dev · release · cd-prod"]
+        ghcr[("GHCR<br>ghcr.io/&lt;owner&gt;/bank-usac/*<br>sha-&lt;commit&gt; · vX.Y.Z<br>nunca latest")]
+        actions -->|"build + push"| ghcr
+    end
+
+    subgraph dev["Entorno de desarrollo — runner de GitHub / máquina local"]
+        direction TB
+        subgraph kind["Cluster kind (efímero en cd-dev.yml)"]
+            subgraph nsdev["namespace dev"]
+                direction TB
+                dgw["«Pod» API Gateway<br>NodePort 30080"]
+                dfe["«Pod» Frontend<br>NodePort 30000"]
+                dsvc["«Pods» Customer · Account ·<br>Transaction · Payment ·<br>Notification &amp; Audit<br>HPA 80 % CPU (1–5)"]
+                dmq["«Pod» RabbitMQ"]
+            end
+        end
+        subgraph compose["Docker Compose — fuera del cluster"]
+            ddb[("PostgreSQL ×5<br>bank_customer · bank_account ·<br>bank_transaction · bank_payment ·<br>bank_notification")]
+        end
+        dgw <-->|AMQP| dmq
+        dsvc <-->|AMQP| dmq
+        dsvc -->|"JDBC/PostgreSQL<br>cada servicio solo a su base"| ddb
+    end
+
+    subgraph gcp["Entorno de producción — GCP us-central1 (Terraform)"]
+        direction TB
+        subgraph vpc["VPC bank-usac-vpc · subred 10.10.0.0/24"]
+            subgraph gke["GKE bank-usac-gke · zonal us-central1-a · e2-medium 1–3 nodos"]
+                subgraph nsprod["namespace prod"]
+                    direction TB
+                    pgw["«Pod» API Gateway<br>Service LoadBalancer"]
+                    psvc["«Pods» Customer · Account ·<br>Transaction · Payment ·<br>Notification &amp; Audit<br>HPA 80 % CPU (1–5)"]
+                    pmq["«Pod» RabbitMQ"]
+                end
+            end
+            subgraph csql["Cloud SQL — fuera del cluster, IP privada"]
+                direction TB
+                sc[("bank-usac-customer-db<br>bank_customer")]
+                sa[("bank-usac-account-db<br>bank_account")]
+                st[("bank-usac-transaction-db<br>bank_transaction")]
+                sp[("bank-usac-payment-db<br>bank_payment")]
+                sn[("bank-usac-notification-db<br>bank_notification")]
+            end
+        end
+        pfe["Frontend<br>Cloud Run / VM (fuera del cluster)"]
+        pgw <-->|AMQP| pmq
+        psvc <-->|AMQP| pmq
+        psvc -->|"JDBC privado<br>(output db_private_ips)"| csql
+    end
+
+    cliente -->|HTTP| dfe
+    cliente -->|HTTP| dgw
+    cliente -->|HTTPS| pfe
+    cliente -->|"HTTPS (API)"| pgw
+    pfe -.->|"PROD_API_BASE_URL"| pgw
+
+    actions -->|"cd-dev.yml<br>merge a develop"| nsdev
+    actions -->|"cd-prod.yml<br>merge a main"| nsprod
+    ghcr -.->|pull| kind
+    ghcr -.->|"pull (ghcr-pull)"| gke
