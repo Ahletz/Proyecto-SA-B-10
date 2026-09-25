@@ -1,46 +1,39 @@
 # Evidencia de Pruebas
 
-Este documento contiene la evidencia de ejecución de las pruebas unitarias de Account Service y Payment Service.
+Este documento contiene la evidencia de ejecución de las pruebas unitarias de Account Service y Payment Service (NestJS, Vitest). Ambas suites corren en CI en cada push a `feature/*` y en cada PR hacia `develop` (`integrante2-ci.yml`).
 
 ## Account Service
 
-8 pruebas unitarias con Mockito, cobertura de:
-- Creación de cuenta con valores iniciales correctos
-- Consulta de saldo disponible (balance menos monto reservado)
-- Reserva de fondos exitosa
-- Reserva de fondos con error por fondos insuficientes
-- Idempotencia (evento ya procesado no se vuelve a ejecutar)
-- Aplicación de transferencia entre cuenta origen y destino
-- Desactivación automática de cuenta con bajo balance y sin actividad
-- No desactivación si la cuenta tiene balance suficiente
+13 pruebas unitarias en 2 archivos:
+
+- `account.service.spec.ts` (10):
+  - Creación de cuenta: `minBalance` 0 por defecto en `MONETARY` y 50 en `SAVINGS`, `minBalance` explícito, comisión guardada y tipo inválido rechazado.
+  - Reserva de fondos (Saga): reserva monto + comisión, rechazo por fondos insuficientes (monto + comisión + saldo mínimo), cuenta origen inexistente e idempotencia.
+  - Compensación: libera monto + comisión cuando Payment rechaza.
+- `rabbit.service.spec.ts` (3): el proceso termina si el broker cierra la conexión o el canal, y no termina en un apagado normal.
 
 ```bash
-mvn test
+cd apps/account-service
+npm test
 ```
-
-![Evidencia de pruebas - Account Service](account-service-tests.png)
 
 ## Payment Service
 
-7 pruebas unitarias con Mockito, cobertura de:
-- Procesamiento de pago aprobado (monto válido)
-- Procesamiento de pago rechazado (monto igual a cero)
-- Procesamiento de pago rechazado (monto negativo)
-- Reacción al evento `account.funds.reserved` publicando `payment.approved`
-- Reacción al evento `account.funds.reserved` publicando `payment.rejected`
-- Idempotencia (evento ya procesado no se vuelve a ejecutar)
-- Consulta del historial de pagos
+9 pruebas unitarias en 2 archivos:
+
+- `payment.service.spec.ts` (6):
+  - Validaciones: monto inválido (≤ 0), monto sobre `PAYMENT_MAX_AMOUNT` e idempotencia por `transactionId`.
+  - Simulación del procesador externo: aprueba con tasas en 0, `EXTERNAL_FAILURE` con tasa de fallo 1 y `TIMEOUT` con tasa de timeout 1.
+- `rabbit.service.spec.ts` (3): mismo comportamiento de reconexión que Account.
 
 ```bash
-mvn test
+cd apps/payment-service
+npm test
 ```
 
-![Evidencia de pruebas - Payment Service](payment-service-tests.png)
+## Resumen (ejecución 2026-09-24)
 
-## Resumen
-
-| Servicio | Pruebas | Resultado |
-|---|---|---|
-| Account Service | 8 | BUILD SUCCESS |
-| Payment Service | 7 | BUILD SUCCESS |
-| **Total** | **15** | **Sin fallos** |
+| Servicio | Archivos | Pruebas | Resultado |
+|---|---|---|---|
+| Account Service | 2 | 13 | 13 passed |
+| Payment Service | 2 | 9 | 9 passed |

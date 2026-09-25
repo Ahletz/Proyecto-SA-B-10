@@ -71,10 +71,13 @@ Ejemplos implementados:
 |---|---|
 | KYC `VERIFIED` | `INFO` |
 | KYC `REJECTED` | `WARNING` |
-| Payment `SUCCESS` | `INFO` |
-| Payment `TIMEOUT` | `WARNING` |
-| Payment `FAILURE` | `ERROR` |
-| Transaction `FAILED` | `ERROR` |
+| `payment.approved` | `INFO` |
+| `payment.rejected` con `reason` `EXTERNAL_FAILURE` | `ERROR` |
+| `payment.rejected` con otro `reason` (`TIMEOUT`, `PAYMENT_LIMIT_EXCEEDED`, `INVALID_AMOUNT`) | `WARNING` |
+| `account.funds.rejected` | `WARNING` |
+| `transaction.compensated` | `WARNING` |
+| `transaction.status.changed` a `FAILED`, o eventos `*.failed` | `ERROR` |
+| Cualquier otro evento | `INFO` |
 
 ### Idempotencia y trazabilidad
 

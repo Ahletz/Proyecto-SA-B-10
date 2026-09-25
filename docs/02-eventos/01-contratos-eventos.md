@@ -53,10 +53,13 @@ Payloads de la Saga:
 
 | Evento | Payload |
 |---|---|
+| `account.created` | accountId, customerId, type (`MONETARY` o `SAVINGS`), balance, minBalance, feeAmount (null si no hay comisión), status |
 | `transaction.transfer.requested` | sourceAccount, targetAccount, amount, requestedBy (customerId del JWT), requestedEmail |
 | `transaction.created` | transactionId, sourceAccount, targetAccount, amount, status |
 | `account.funds.rejected`, `payment.rejected`, `account.transfer.failed` | transactionId, reason |
 | `transaction.completed`, `transaction.failed`, `transaction.compensated` | transactionId, status, reason (solo en fallos) |
+
+Tipos de cuenta (decisión de Fase 2): el contrato usa los mismos valores que la API y la base de datos, `MONETARY` (monetaria/corriente, saldo mínimo 0 por defecto) y `SAVINGS` (ahorro, saldo mínimo 50 por defecto). La propuesta inicial `tipoCuenta`/`saldoMinimo`/`comision` con `AHORRO`/`CORRIENTE` se reemplazó por `type`/`minBalance`/`feeAmount`.
 
 ### Motivos de fallo (`reason`)
 | Productor | Motivo | Cuándo |

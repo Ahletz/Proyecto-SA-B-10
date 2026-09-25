@@ -10,6 +10,8 @@ export function AccountsPage(){
   const[customerId,setCustomerId]=useState('');
 
   const load=()=>api(`/api/accounts${customer?.role==='CLIENT'?'':customerId?`?customerId=${customerId}`:''}`).then(setA);
+  // Solo al cambiar de sesión: con customerId se consulta al crear, no en cada tecla.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(()=>{if(customer)load()},[customer]);
 
   const create=async()=>{
