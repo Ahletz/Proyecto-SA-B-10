@@ -72,6 +72,26 @@ Renderizar el ambiente dev localmente:
 kubectl kustomize k8s/overlays/dev
 ```
 
+## Estructura del monorepo
+
+Todo el sistema vive en un solo repositorio. Cada microservicio tiene su código y su `Dockerfile` en `apps/<servicio>/`, sus manifiestos en `k8s/<servicio>/` y su job de CI en el workflow de su dueño:
+
+| Servicio | Código + `Dockerfile` | Manifiestos | Pipeline (CI) |
+| -------- | --------------------- | ----------- | ------------- |
+| Customer | `apps/customer-service/` | `k8s/customer-service/` | `integrante1-ci.yml` → job `customer-service` |
+| Notification & Audit | `apps/notification-audit-service/` | `k8s/notification-audit-service/` | `integrante1-ci.yml` → job `notification-audit-service` |
+| Frontend | `apps/frontend/` | `k8s/frontend/` | `integrante1-ci.yml` → job `frontend` |
+| Account | `apps/account-service/` | `k8s/account-service/` | `integrante2-ci.yml` → job `account-service` |
+| Payment | `apps/payment-service/` | `k8s/payment-service/` | `integrante2-ci.yml` → job `payment-service` |
+| Transaction | `apps/transaction-service/` | `k8s/transaction-service/` | `integrante3-ci.yml` → job `transaction-service` |
+| API Gateway | `apps/api-gateway/` | `k8s/api-gateway/` | `integrante3-ci.yml` → job `api-gateway` |
+
+Lo compartido va aparte: `k8s/{config,broker,base,components,overlays}` (configuración común, RabbitMQ y ambientes), `infrastructure/` (Docker Compose local, SQL de cada base y Terraform), `tests/` (E2E y carga) y `scripts/` (arranque local).
+
+**Por qué los manifiestos van en `k8s/<servicio>/` y no dentro de `apps/<servicio>/`:** separa lo que se construye (código e imagen) de cómo se despliega. Toda la configuración de Kubernetes queda en un solo árbol: `k8s/base` agrupa los servicios, los overlays `dev`/`prod` los reutilizan sin copiarlos, `scripts/project/start-k8s.sh` los aplica en local y el job `k8s-manifests` de `integrante3-ci.yml` valida todo con un solo filtro (`k8s/**`). Cada servicio sigue teniendo su propio directorio de manifiestos.
+
+**Por qué un workflow por integrante y no uno por servicio:** cada integrante es dueño de sus servicios y de su pipeline, pero dentro de cada workflow los jobs son por servicio y solo corren si cambió su carpeta (ver abajo). El resultado es el mismo que un pipeline por servicio, con menos archivos que mantener. `cd-dev.yml` también decide por servicio.
+
 ## Build selectivo (monorepo)
 
 Todos los servicios viven en un solo repositorio, pero solo se construye lo que cambió:
@@ -138,7 +158,7 @@ Configuración del repositorio (Settings → Secrets and variables → Actions):
 
 ## Pendiente (depende de la infraestructura de producción)
 
-- Cluster GKE (`gke.tf`, en la VPC `bank-usac-vpc`) y la configuración de la tabla anterior. Hasta entonces `cd-prod.yml` se omite.
+- `terraform apply` de `infrastructure/terraform` (red, Cloud SQL y GKE; ver [Terraform](05-terraform-cloud-sql.md)) y la configuración de la tabla anterior. Hasta entonces `cd-prod.yml` se omite.
 - Despliegue del frontend en Cloud Run/VM.
 
 ## Configuración del repositorio (una vez, requiere admin)
