@@ -16,11 +16,31 @@ public class EventClassificationService {
             case "customer.kyc.status.changed" ->
                 classifyKyc(payload, origin);
 
-            case "payment.result.simulated" ->
+            case "payment.rejected" ->
                 classifyPayment(payload, origin);
 
             case "transaction.status.changed" ->
                 classifyTransaction(payload, origin);
+
+            case "account.funds.rejected" ->
+                new ClassificationResult(
+                    NotificationSeverity.WARNING,
+                    origin,
+                    "Fondos rechazados para la transacción "
+                        + value(payload, "transactionId", "desconocida")
+                        + ": "
+                        + value(payload, "reason", "UNKNOWN")
+                );
+
+            case "transaction.compensated" ->
+                new ClassificationResult(
+                    NotificationSeverity.WARNING,
+                    origin,
+                    "Transacción "
+                        + value(payload, "transactionId", "desconocida")
+                        + " compensada: "
+                        + value(payload, "reason", "UNKNOWN")
+                );
 
             case "account.created" ->
                 new ClassificationResult(
@@ -87,25 +107,25 @@ public class EventClassificationService {
             JsonNode payload,
             String origin) {
 
-        String result = value(
+        // Payment publica las fallas simuladas como payment.rejected con reason.
+        String reason = value(
             payload,
-            "resultado",
+            "reason",
             "UNKNOWN"
         ).toUpperCase(Locale.ROOT);
 
-        NotificationSeverity severity = switch (result) {
-            case "FAILURE" -> NotificationSeverity.ERROR;
-            case "TIMEOUT" -> NotificationSeverity.WARNING;
-            default -> NotificationSeverity.INFO;
-        };
+        NotificationSeverity severity =
+            "EXTERNAL_FAILURE".equals(reason)
+                ? NotificationSeverity.ERROR
+                : NotificationSeverity.WARNING;
 
         return new ClassificationResult(
             severity,
             origin,
-            "Resultado de pago "
+            "Pago "
                 + value(payload, "paymentId", "desconocido")
-                + ": "
-                + result
+                + " rechazado: "
+                + reason
         );
     }
 
