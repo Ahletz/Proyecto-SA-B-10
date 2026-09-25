@@ -20,3 +20,33 @@ variable "db_password" {
   type        = string
   sensitive   = true
 }
+
+variable "gke_cluster_name" {
+  description = "Nombre del cluster GKE (vars.GKE_CLUSTER en GitHub)"
+  type        = string
+  default     = "bank-usac-gke"
+}
+
+variable "gke_zone" {
+  description = "Zona del cluster GKE zonal (vars.GKE_LOCATION en GitHub)"
+  type        = string
+  default     = "us-central1-a"
+}
+
+variable "gke_machine_type" {
+  description = "Tipo de máquina de los nodos"
+  type        = string
+  default     = "e2-medium"
+}
+
+variable "gke_min_nodes" {
+  description = "Mínimo de nodos del node pool (cluster autoscaler)"
+  type        = number
+  default     = 1
+}
+
+variable "gke_max_nodes" {
+  description = "Máximo de nodos del node pool (cluster autoscaler)"
+  type        = number
+  default     = 3
+}
