@@ -10,7 +10,7 @@ Pipeline en GitHub Actions que sigue la convención de ramas y tags del enunciad
 | Pull request `feature/*` → `develop` | Los mismos | Repite build + test; si pasa, se puede hacer merge |
 | Merge a `develop` | `cd-dev.yml` | Construye y publica las 7 imágenes con tag `sha-<commit>`, las despliega en el namespace `dev` y corre el smoke test end-to-end |
 | Push a `release/X.Y.Z` | `release.yml` | Publica imágenes candidatas, las valida con el smoke test y solo entonces publica las imágenes finales `vX.Y.Z` y crea el tag git `vX.Y.Z` |
-| Merge a `main` | *pendiente* | CD a producción con rolling update usando las imágenes `vX.Y.Z` (depende del Terraform/cluster de producción) |
+| Merge a `main` | `cd-prod.yml` | Despliega en GKE (namespace `prod`) las imágenes `vX.Y.Z` del último tag, con rolling update. Se omite mientras no exista el cluster (`vars.GKE_CLUSTER`) |
 
 ### Workflows
 
@@ -22,6 +22,7 @@ Pipeline en GitHub Actions que sigue la convención de ramas y tags del enunciad
 | `reusable-node-ci.yml` | Reutilizable | Build + test (+ lint) de un servicio Node/NestJS |
 | `cd-dev.yml` | CD | Imágenes `sha-<commit>` + despliegue en `dev` |
 | `release.yml` | CD | Imágenes `vX.Y.Z` + tag git |
+| `cd-prod.yml` | CD | Despliegue en GKE (namespace `prod`) |
 | `reusable-kind-smoke.yml` | Reutilizable | Cluster kind efímero + overlay `dev` + smoke test (lo usan `cd-dev.yml` y `release.yml`) |
 
 ## CI por integrante
@@ -41,7 +42,7 @@ jobs:
 
 El workflow reutilizable instala con `npm ci`, ejecuta lint/test según los inputs, compila con `npm run build` y, en los push, verifica que la imagen Docker construya.
 
-`integrante2-ci.yml` cubre Account y Payment con el mismo workflow reutilizable (solo el código NestJS que se despliega; el código Java paralelo de esas carpetas no se compila). `integrante3-ci.yml` cubre Transaction Service, API Gateway y los manifiestos de `k8s/`. Los manifiestos se renderizan con Kustomize, se validan con kubeconform y se rechaza cualquier imagen `:latest`.
+`integrante2-ci.yml` cubre Account y Payment con el mismo workflow reutilizable (solo el código NestJS que se despliega; el código Java paralelo de esas carpetas no se compila). `integrante3-ci.yml` cubre Transaction Service, API Gateway y los manifiestos de `k8s/`. Los overlays `dev` y `prod` se renderizan con Kustomize, se validan con kubeconform y se rechaza cualquier imagen `:latest`.
 
 ## Manifiestos Kubernetes (Kustomize)
 
@@ -53,7 +54,8 @@ k8s/
 ├── <servicio>/kustomization.yaml
 ├── base/                          # agrupa config, broker y todos los servicios
 ├── components/autoscaling/        # CPU requests/limits, rolling update, HPA 80 %
-└── overlays/dev/                  # namespace dev + versión de imágenes
+├── overlays/dev/                  # namespace dev + versión de imágenes
+└── overlays/prod/                 # namespace prod, Cloud SQL, Gateway LoadBalancer, sin frontend
 ```
 
 - **Local (`scripts/project/start-k8s.sh`)** aplica los `deployment.yaml` y `config/` directamente en el namespace `bank-usac`, con imágenes `:local`.
@@ -86,18 +88,37 @@ Mientras no exista un cluster persistente, `reusable-kind-smoke.yml` crea un clu
 
 La URL pública del Gateway que se compila en el frontend se toma de la variable del repositorio `PROD_API_BASE_URL` (Settings → Secrets and variables → Actions → Variables). Si no está definida, el frontend apunta a `http://localhost:8080` y el workflow lo avisa.
 
+## Producción
+
+`overlays/prod` reutiliza la base con el componente de autoscaling en el namespace `prod`:
+
+- Imágenes `ghcr.io/<owner>/bank-usac/<servicio>:vX.Y.Z`; `cd-prod.yml` fija la versión con `kustomize edit set image`.
+- Bases de datos en Cloud SQL por IP privada, puerto 5432 y los nombres de `infrastructure/terraform/cloudsql.tf`. Los hosts salen de `terraform output -json db_private_ips` y el Secret `bank-db-secret` lo crea el workflow; en git no hay credenciales.
+- El Gateway se publica con un Service `LoadBalancer`. El frontend no corre en el cluster: va en Cloud Run/VM y su URL del Gateway es la variable `PROD_API_BASE_URL` de `release.yml`.
+
+`cd-prod.yml` (merge a `main`): toma el último tag `vX.Y.Z` alcanzable desde `main`, verifica que las 6 imágenes existan en GHCR, se autentica en GCP, crea el namespace, el Secret de DB y el acceso a GHCR (`ghcr-pull`), aplica el overlay y espera cada rollout. Si algo falla, imprime pods y logs.
+
+Configuración del repositorio (Settings → Secrets and variables → Actions):
+
+| Tipo | Nombre | Valor |
+| ---- | ------ | ----- |
+| Secret | `GCP_SA_KEY` | JSON de una service account con rol Kubernetes Engine Developer |
+| Secret | `PROD_DB_PASSWORD` | `db_password` de Terraform |
+| Secret | `GHCR_PULL_TOKEN` | Token con `read:packages` para que GKE descargue las imágenes |
+| Variable | `GKE_CLUSTER` / `GKE_LOCATION` | Nombre y zona del cluster |
+| Variable | `PROD_DB_PRIVATE_IPS` | Salida de `terraform output -json db_private_ips` |
+
 ## Rollback
 
 - **dev:** el cluster es efímero, así que no hay nada que revertir en él. Se revierte el commit en `develop` (`git revert <commit>`, por PR) y el merge vuelve a desplegar.
 - **Release fallida:** si falla antes de **promote** no se publicó ninguna versión final; las imágenes `-rc.<n>` solo son candidatas y no se despliegan en producción.
-- **Producción** (cuando exista `cd-prod.yml`): se vuelve a la versión anterior, que sigue publicada porque las imágenes `vX.Y.Z` nunca se sobrescriben.
+- **Producción:** se vuelve a la versión anterior, que sigue publicada porque las imágenes `vX.Y.Z` nunca se sobrescriben.
   - Inmediato: `kubectl -n prod rollout undo deployment/<servicio>` regresa al ReplicaSet anterior con rolling update.
   - Definitivo: volver a desplegar la versión anterior (`kustomize edit set image bank-usac/<servicio>=ghcr.io/<owner>/bank-usac/<servicio>:v<anterior>`), y corregir con una `release/X.Y.(Z+1)`.
 
 ## Pendiente (depende de la infraestructura de producción)
 
-- Workflow `cd-prod.yml` (merge a `main` → rolling update con `vX.Y.Z`) y `overlays/prod`, con las variables de base de datos provistas por Terraform.
-- Credenciales del cluster como secret del repositorio y acceso del cluster a GHCR (los paquetes son privados por defecto: hacerlos públicos o usar un `imagePullSecret`).
+- Cluster GKE (`gke.tf`, en la VPC `bank-usac-vpc`) y la configuración de la tabla anterior. Hasta entonces `cd-prod.yml` se omite.
 - Despliegue del frontend en Cloud Run/VM.
 
 ## Configuración del repositorio (una vez, requiere admin)
