@@ -51,17 +51,21 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Render dev overlay
-        run: kubectl kustomize k8s/overlays/dev > rendered-dev.yaml
+      - name: Render overlays
+        run: |
+          kubectl kustomize k8s/overlays/dev > rendered-dev.yaml
+          kubectl kustomize k8s/overlays/prod > rendered-prod.yaml
 
       - name: Validate schemas (kubeconform)
         run: |
-          docker run --rm -i ghcr.io/yannh/kubeconform:v0.7.0 \
-            -strict -summary - < rendered-dev.yaml
+          for f in rendered-dev.yaml rendered-prod.yaml; do
+            docker run --rm -i ghcr.io/yannh/kubeconform:v0.7.0 \
+              -strict -summary - < "$f"
+          done
 
       - name: Reject mutable image tags
         run: |
-          if grep -nE 'image: .*:latest\b' rendered-dev.yaml; then
+          if grep -nE 'image: .*:latest\b' rendered-dev.yaml rendered-prod.yaml; then
             echo "::error::No se permiten imágenes con tag latest"
             exit 1
           fi

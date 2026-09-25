@@ -25,15 +25,23 @@
 ## Cuentas
 En `/accounts` crear `MONETARY` o `SAVINGS`, indicar saldo inicial y consultar saldo/disponible/estado.
 
-## Transferencia CLIENT
-1. copiar UUID de cuenta origen y destino;
-2. abrir `/transfer`;
-3. ingresar monto positivo;
-4. enviar;
-5. guardar `correlationId`;
-6. consultar estado hasta terminal.
+## Navegación
+Después de iniciar sesión, la barra superior muestra solo las opciones del rol: CLIENT ve Inicio, Perfil, Cuentas, Transferir e Historial; CASHIER agrega Pagos; ADMIN agrega Pagos, Notificaciones y Auditoría (no transfiere).
 
-Estados: `PENDING`, `PROCESSING`, `COMPLETED`, `FAILED`, `COMPENSATING`, `COMPENSATED`.
+## Transferencia CLIENT
+Requisito: el KYC del cliente debe estar `VERIFIED`. Mientras no lo esté, Inicio y Transferir muestran un aviso y la transferencia se rechaza con `KYC_NOT_VERIFIED`. Un ADMIN lo verifica con `PATCH /api/customers/:customerId/kyc` (ver [referencia API](02-referencia-api.md)).
+
+1. abrir **Transferir** (`/transfer`);
+2. elegir la cuenta origen de la lista (muestra el saldo disponible);
+3. ingresar la cuenta destino (el campo sugiere las cuentas propias) y un monto positivo;
+4. enviar: el estado se actualiza solo hasta llegar a un estado final;
+5. si falla, se muestra el motivo (KYC, fondos insuficientes o rechazo del pago) y qué hacer;
+6. **Ver historial de la cuenta** abre el historial filtrado por esa cuenta.
+
+Estados mostrados: Recibida en cola → Pendiente → Procesando pago → Completada, o Fallida / Fallida · fondos devueltos (compensada). El `correlationId` queda visible para rastrear la transferencia en auditoría.
+
+## Historial
+En **Historial** (`/transactions`) el CLIENT elige una de sus cuentas; ADMIN y CASHIER escriben el `accountId` (o llegan desde **Cuentas → Ver historial**). Filtros por rango de fechas y estado (`PENDING`, `APPROVED`, `FAILED`), con paginación; las fallidas muestran el motivo.
 
 ## CASHIER
 Usuario demo: `cashier`. La contraseña se suministra por configuración de ambiente de demostración. Puede trabajar con cuentas, pagos y mantenimiento autorizado.

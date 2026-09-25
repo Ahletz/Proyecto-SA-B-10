@@ -1,0 +1,65 @@
+---
+title: C4 Nivel 3 — Transaction Service (Fase 2)
+config:
+  layout: elk
+  flowchart:
+    wrappingWidth: 260
+---
+flowchart TB
+    gateway["API Gateway\nhistorial y estado por correlationId"]
+    rabbit{{"RabbitMQ\nbank.events · .retry · .dlx"}}
+
+    subgraph tx["Transaction Service — NestJS :3003"]
+        direction TB
+        consumer["TransactionEventsConsumer\ntransfer.requested · account.funds.* ·\npayment.rejected · account.transfer.completed ·\ncustomer.kyc.status.changed"]
+        controller["TransactionQueryController\nGET /api/transactions?accountId&from&to&status\nGET /api/transactions/correlation/:id"]
+
+        create["CreateTransactionService\ncrea PENDING o FAILED (KYC_NOT_VERIFIED)"]
+        update["UpdateTransactionStateService\nPROCESSING · COMPLETED · FAILED ·\nCOMPENSATING · COMPENSATED + failure_reason"]
+        history["GetTransactionHistoryService\norigen o destino, filtros, paginación,\nestado público PENDING/APPROVED/FAILED"]
+        kyc["CustomerKycService\nproyección local del KYC\n(ignora eventos más viejos)"]
+        idem["EventIdempotencyService\neventId procesados"]
+        publisher["TransactionEventPublisher\ncreated · completed · failed · compensated ·\nstatus.changed · eventId determinista + causationId"]
+        rabbitsvc["RabbitMqService\npub/sub + retry/DLQ,\ntermina el proceso si cae la conexión"]
+
+        txrepo["TransactionRepository (puerto)"]
+        kycrepo["CustomerKycRepository (puerto)"]
+        txorm["TypeOrmTransactionRepository"]
+        kycorm["TypeOrmCustomerKycRepository"]
+    end
+
+    db[("bank_transaction\ntransactions · customer_kyc_status ·\nprocessed_events")]
+
+    gateway -->|"HTTP de borde"| controller
+    rabbit -->|"eventos consumidos"| rabbitsvc
+    rabbitsvc --> consumer
+    consumer -->|"deduplica"| idem
+    consumer -->|"transfer.requested"| create
+    consumer -->|"verifica / actualiza KYC"| kyc
+    consumer -->|"transiciones de la Saga"| update
+    consumer -->|"publica resultado"| publisher
+    publisher --> rabbitsvc
+    rabbitsvc -->|"publish"| rabbit
+
+    controller --> history
+    controller -->|"por correlationId"| txrepo
+    create --> txrepo
+    update --> txrepo
+    history --> txrepo
+    kyc --> kycrepo
+    txrepo -.->|"implementado por"| txorm
+    kycrepo -.->|"implementado por"| kycorm
+    txorm -->|"TypeORM"| db
+    kycorm -->|"TypeORM"| db
+    idem -->|"TypeORM"| db
+
+    classDef edge fill:#1f6fc0,color:#fff,stroke:#0b4db5
+    classDef svc fill:#dbe8fb,color:#172033,stroke:#1f6fc0
+    classDef port fill:#fff,color:#172033,stroke:#1f6fc0,stroke-dasharray:4 3
+    classDef infra fill:#e5e7eb,color:#172033,stroke:#6b7280
+    classDef dbc fill:#fff7e6,color:#172033,stroke:#b54708
+    class gateway edge
+    class consumer,controller,create,update,history,kyc,idem,publisher,rabbitsvc,txorm,kycorm svc
+    class txrepo,kycrepo port
+    class rabbit infra
+    class db dbc

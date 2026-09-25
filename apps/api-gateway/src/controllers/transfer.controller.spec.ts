@@ -39,3 +39,46 @@ describe('TransferController (Gateway) - correlationId', () => {
     expect(accountHeaders['X-Correlation-Id']).toBe(id);
   });
 });
+
+describe('TransferController (Gateway) - estado por correlationId', () => {
+  const rabbit = {} as RabbitService;
+  let calls: string[];
+
+  beforeEach(() => {
+    calls = [];
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      calls.push(url);
+      const body = url.includes('/api/transactions/correlation/')
+        ? { transactionId: 't1', sourceAccount: 'A', status: 'COMPLETED' }
+        : { accountId: 'A', customerId: 'c1' };
+      return { ok: true, status: 200, text: async () => JSON.stringify(body) } as Response;
+    }));
+  });
+
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('devuelve el estado al CLIENT dueño de la cuenta origen', async () => {
+    const controller = new TransferController(rabbit, config);
+
+    const result = await controller.status({ user: { role: 'CLIENT', customerId: 'c1' } }, 'cid-1');
+
+    expect(result.status).toBe('COMPLETED');
+    expect(calls[1]).toBe('http://localhost:3004/api/accounts/A');
+  });
+
+  it('rechaza con 403 a un CLIENT que no es dueño de la cuenta origen', async () => {
+    const controller = new TransferController(rabbit, config);
+
+    await expect(
+      controller.status({ user: { role: 'CLIENT', customerId: 'otro' } }, 'cid-1'),
+    ).rejects.toMatchObject({ status: 403 });
+  });
+
+  it('ADMIN consulta sin verificar propiedad', async () => {
+    const controller = new TransferController(rabbit, config);
+
+    await controller.status({ user: { role: 'ADMIN', customerId: 'admin' } }, 'cid-1');
+
+    expect(calls).toHaveLength(1);
+  });
+});
