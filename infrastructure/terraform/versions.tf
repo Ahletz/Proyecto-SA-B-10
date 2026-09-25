@@ -6,6 +6,11 @@ terraform {
       version = "~> 6.0"
     }
   }
+
+  backend "gcs" {
+    bucket = "bank-usac-tfstate-elevated-range-509623-j8"
+    prefix = "terraform/state"
+  }
 }
 
 provider "google" {
