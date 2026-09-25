@@ -25,14 +25,50 @@ on:
 
 permissions:
   contents: read
+  pull-requests: read
 
 concurrency:
   group: integrante1-ci-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
+  # Build selectivo: cada job corre solo si cambió su carpeta (o este workflow).
+  changes:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      customer-service: ${{ steps.filter.outputs.customer-service }}
+      notification-audit-service: ${{ steps.filter.outputs.notification-audit-service }}
+      frontend: ${{ steps.filter.outputs.frontend }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Detect changes per service
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          base: develop
+          filters: |
+            workflow: &workflow
+              - '.github/workflows/integrante1-ci.yml'
+            customer-service:
+              - *workflow
+              - 'apps/customer-service/**'
+              - 'infrastructure/databases/customer/**'
+            notification-audit-service:
+              - *workflow
+              - 'apps/notification-audit-service/**'
+              - 'infrastructure/databases/notification/**'
+            frontend:
+              - *workflow
+              - 'apps/frontend/**'
+
   customer-service:
     name: Customer - Build and Test
+    needs: changes
+    if: needs.changes.outputs.customer-service == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -72,6 +108,8 @@ jobs:
 
   notification-audit-service:
     name: Notification - Build and Test
+    needs: changes
+    if: needs.changes.outputs.notification-audit-service == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -111,6 +149,8 @@ jobs:
 
   frontend:
     name: Frontend - Build and Validation
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
 

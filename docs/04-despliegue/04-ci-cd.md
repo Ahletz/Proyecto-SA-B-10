@@ -8,7 +8,7 @@ Pipeline en GitHub Actions que sigue la convención de ramas y tags del enunciad
 | ------ | -------- | -------- |
 | Push a `feature/**` | `integrante1-ci.yml`, `integrante2-ci.yml`, `integrante3-ci.yml` | Build + test (+ lint) de los servicios que cambiaron, prueba de `docker build` y validación de manifiestos |
 | Pull request `feature/*` → `develop` | Los mismos | Repite build + test; si pasa, se puede hacer merge |
-| Merge a `develop` | `cd-dev.yml` | Construye y publica las 7 imágenes con tag `sha-<commit>`, las despliega en el namespace `dev` y corre el smoke test end-to-end |
+| Merge a `develop` | `cd-dev.yml` | Construye solo las imágenes de los servicios que cambiaron, reutiliza las demás (ver [Build selectivo](#build-selectivo-monorepo)), publica las 7 con tag `sha-<commit>`, las despliega en el namespace `dev` y corre el smoke test end-to-end |
 | Push a `release/X.Y.Z` | `release.yml` | Publica imágenes candidatas, las valida con el smoke test y solo entonces publica las imágenes finales `vX.Y.Z` y crea el tag git `vX.Y.Z` |
 | Merge a `main` | `cd-prod.yml` | Despliega en GKE (namespace `prod`) las imágenes `vX.Y.Z` del último tag, con rolling update. Se omite mientras no exista el cluster (`vars.GKE_CLUSTER`) |
 
@@ -27,7 +27,7 @@ Pipeline en GitHub Actions que sigue la convención de ramas y tags del enunciad
 
 ## CI por integrante
 
-Cada integrante tiene su workflow, filtrado por `paths`, para que un cambio solo dispare los jobs de los servicios afectados. Los servicios Node/NestJS reutilizan `reusable-node-ci.yml`:
+Cada integrante tiene su workflow, filtrado por `paths`: un cambio fuera de sus carpetas no lo dispara. Dentro de cada workflow, un job `changes` (`dorny/paths-filter`, comparando contra `develop`) decide qué jobs corren, así que tocar un servicio no compila los otros del mismo integrante. Si cambia el propio workflow, corren todos sus jobs. Los servicios Node/NestJS reutilizan `reusable-node-ci.yml`:
 
 ```yaml
 jobs:
@@ -69,6 +69,24 @@ Renderizar el ambiente dev localmente:
 ```bash
 kubectl kustomize k8s/overlays/dev
 ```
+
+## Build selectivo (monorepo)
+
+Todos los servicios viven en un solo repositorio, pero solo se construye lo que cambió:
+
+| Etapa | Cómo decide |
+| ----- | ----------- |
+| CI (`integrante1/2/3-ci.yml`) | `paths` del workflow + job `changes`; cada job de servicio tiene `if:` con su salida. Los jobs omitidos cuentan como exitosos para los checks obligatorios |
+| CD dev (`cd-dev.yml`) | El job `plan` compara el push con el commit anterior (`github.event.before`) por carpeta `apps/<servicio>/**` |
+
+En `cd-dev.yml`:
+
+1. `plan` arma dos listas: servicios a **construir** (cambió su carpeta, o no existe su imagen `sha-<commit anterior>`) y servicios a **reutilizar**. Con `workflow_dispatch` o en el primer push se construye todo. El resumen del run muestra ambas listas.
+2. `images` construye solo la primera lista (matriz dinámica).
+3. `reuse-images` copia la imagen anterior al tag nuevo con `docker buildx imagetools create`: no recompila y conserva el mismo digest.
+4. `deploy-dev` corre si ninguno de los anteriores falló. Cada commit sigue teniendo las 7 imágenes con el mismo tag, así que el smoke test en kind despliega el sistema completo; los servicios reutilizados solo se descargan.
+
+`release.yml` construye siempre los 7 servicios: una versión `vX.Y.Z` etiqueta el sistema completo.
 
 ## Ambiente dev
 
@@ -123,5 +141,5 @@ Configuración del repositorio (Settings → Secrets and variables → Actions):
 
 ## Configuración del repositorio (una vez, requiere admin)
 
-- **Branch protection** en `main` y `develop`: exigir pull request y los checks de CI en verde.
+- **Branch protection** en `main` y `develop`: exigir pull request y los checks de CI en verde. Un workflow que no se dispara por su filtro `paths` deja su check pendiente para siempre, así que antes de exigir checks hay que quitar el `paths` a nivel de workflow en `integrante1/2/3-ci.yml` (el job `changes` ya filtra por servicio) y exigir los checks `Detect changes` más los de cada servicio (un job omitido por `if:` cuenta como exitoso).
 - **Settings → Actions → General → Workflow permissions:** "Read and write permissions", para que los workflows publiquen en GHCR y creen tags.
