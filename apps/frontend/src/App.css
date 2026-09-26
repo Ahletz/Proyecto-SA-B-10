@@ -1018,9 +1018,10 @@ td.strong{
   min-height:100vh;
   display:grid;
   justify-items:center;
-  align-content:center;
+  /* Desde arriba: la marca siempre cae sobre la franja azul, sea cual sea el alto de la tarjeta. */
+  align-content:start;
   gap:20px;
-  padding:32px 16px;
+  padding:48px 16px 32px;
   background:linear-gradient(180deg,#0b2347 0,#0b2347 220px,#f3f6fb 220px);
 }
 
