@@ -12,7 +12,7 @@ Fuente Mermaid: [`c4-src/c4-container.mmd`](c4-src/c4-container.mmd).
 
 | Contenedor | Tecnología | Responsabilidad |
 | ---------- | ---------- | --------------- |
-| Frontend | React + TypeScript, servido con `serve` en `:3000` | Shell con menú por rol, transferencias con seguimiento de estado, historial y módulos de cada integrante |
+| Frontend | React + TypeScript, servido con nginx en `:3000` (en prod también proxy de `/api` al Gateway) | Shell con menú por rol, transferencias con seguimiento de estado, historial y módulos de cada integrante |
 | API Gateway | NestJS `:8080` | Único punto de entrada HTTP: JWT, roles, propiedad de cuentas, `X-Correlation-Id`. Publica `transaction.transfer.requested` |
 | Customer | Spring Boot `:8081` | Registro, activación, login/JWT y estado KYC |
 | Account | NestJS `:3004` | Cuentas monetarias y de ahorro, reservas, saldo mínimo y comisión |
@@ -37,7 +37,8 @@ Entre microservicios no hay HTTP: la coordinación es por eventos (detalle en [c
 
 ## Despliegue
 
-- **Kubernetes:** todos los contenedores de aplicación, RabbitMQ y MailHog corren en el cluster. El namespace `dev` es un cluster kind efímero que crea `cd-dev.yml` en cada merge a `develop`; `prod` será GKE (pendiente del Terraform de Integrante 2).
+- **Kubernetes:** los microservicios, el API Gateway, RabbitMQ y MailHog corren en el cluster. El namespace `dev` es un cluster kind efímero que crea `cd-dev.yml` en cada merge a `develop` (ahí también corre el Frontend); `prod` es GKE (`bank-usac-gke`), desplegado por `cd-prod.yml`.
+- **Frontend en producción:** fuera del cluster, en Cloud Run (`bank-usac-frontend`). nginx sirve la SPA por HTTPS y reenvía `/api` al LoadBalancer del Gateway, así el navegador no mezcla HTTPS con HTTP.
 - **HPA:** los cinco microservicios escalan de 1 a 5 réplicas al 80 % de CPU, con rolling update `maxUnavailable: 0` / `maxSurge: 1` y probes HTTP.
 - **Bases de datos fuera del cluster:** una PostgreSQL por servicio (data ownership). En `dev` corren con Docker Compose; en `prod` son Cloud SQL (PostgreSQL 17) con IP privada en la VPC `bank-usac-vpc`. Las credenciales llegan por `bank-db-config` y `bank-db-secret`.
 - **CI/CD:** GitHub Actions construye las imágenes y las publica en GHCR con tag `sha-<commit>` (dev) o `vX.Y.Z` (release), nunca `latest`. El cluster despliega esas imágenes versionadas. Ver [CI/CD](../04-despliegue/04-ci-cd.md).

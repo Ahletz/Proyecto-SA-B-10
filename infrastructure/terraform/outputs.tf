@@ -22,3 +22,13 @@ output "github_deployer_email" {
   description = "Service account para secrets.GCP_SA_KEY (crear la llave con gcloud)"
   value       = google_service_account.github_deployer.email
 }
+
+output "frontend_registry" {
+  description = "Artifact Registry del frontend (vars.GAR_REPOSITORY en GitHub)"
+  value       = "${google_artifact_registry_repository.images.location}-docker.pkg.dev/${var.project_id}/${google_artifact_registry_repository.images.repository_id}"
+}
+
+output "frontend_run_service_account" {
+  description = "Service account del servicio Cloud Run del frontend (vars.FRONTEND_RUN_SA en GitHub)"
+  value       = google_service_account.frontend_run.email
+}

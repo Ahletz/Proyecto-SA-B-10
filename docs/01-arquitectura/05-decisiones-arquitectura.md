@@ -81,3 +81,10 @@ El correo se envía por SMTP real hacia MailHog en desarrollo. Esto permite demo
 **Ventajas:** los mismos YAML que usa el despliegue local con kind se reutilizan en `dev` y `prod`; cada overlay solo cambia namespace, imágenes, configuración de DB y tipo de Service. `kubectl` trae Kustomize, así que no hay otra herramienta que instalar en los runners.
 
 **Coste / alternativas:** Helm permite plantillas y rollback por release (`helm rollback`), pero agrega una capa de plantillas para solo dos ambientes. El rollback se hace con `kubectl rollout undo` o redesplegando la versión anterior (ver [CI/CD](../04-despliegue/04-ci-cd.md#rollback)).
+
+## ADR-015 - Frontend de producción en Cloud Run con proxy nginx
+**Decisión:** el frontend de producción corre fuera del cluster, en Cloud Run (`bank-usac-frontend`). La imagen usa nginx: sirve la SPA y reenvía `/api` al LoadBalancer del Gateway (`API_UPSTREAM`). `cd-prod.yml` copia `frontend:vX.Y.Z` de GHCR a Artifact Registry y hace `gcloud run deploy`; Terraform (`frontend.tf`) crea el registro, la identidad del servicio y los permisos.
+
+**Ventajas:** Cloud Run es un servicio de despliegue rápido: HTTPS y dominio propios, escala a cero y cada despliegue crea una revisión nueva que recibe el tráfico cuando está lista (sin downtime y con rollback por revisión). El proxy deja la API en el mismo origen, así el navegador no bloquea llamadas HTTP desde una página HTTPS (contenido mixto) y no depende de CORS. La imagen no lleva compilada la IP del Gateway: el pipeline la lee del LoadBalancer en cada despliegue, así que la misma imagen probada en la release llega a producción.
+
+**Coste / alternativas:** una VM de Compute Engine con el contenedor evita Artifact Registry, pero hay que mantener el sistema operativo, abrir SSH al pipeline y resolver HTTPS a mano. Cloud Run no descarga de GHCR, por eso la imagen se copia a Artifact Registry (mismo tag, sin recompilar). El tramo de Cloud Run al Gateway es HTTP por la IP pública del LoadBalancer; para un entorno real se usaría un Ingress con certificado.

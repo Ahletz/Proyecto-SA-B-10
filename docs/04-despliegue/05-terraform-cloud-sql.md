@@ -1,6 +1,6 @@
 # Terraform — Infraestructura de producción en GCP (Fase 2)
 
-Toda la infraestructura de producción se crea con Terraform desde `infrastructure/terraform/`: red, bases de datos (Cloud SQL) y cluster de Kubernetes (GKE). Nada se crea a mano en la consola, salvo el bucket del estado (ver [Estado remoto](#estado-remoto)). Las decisiones y sus trade-offs están en los ADR-009 a ADR-012 de [Decisiones de arquitectura](../01-arquitectura/05-decisiones-arquitectura.md).
+Toda la infraestructura de producción se crea con Terraform desde `infrastructure/terraform/`: red, bases de datos (Cloud SQL), cluster de Kubernetes (GKE) y lo que usa el frontend en Cloud Run (Artifact Registry y permisos). Nada se crea a mano en la consola, salvo el bucket del estado (ver [Estado remoto](#estado-remoto)). Las decisiones y sus trade-offs están en los ADR-009 a ADR-012 de [Decisiones de arquitectura](../01-arquitectura/05-decisiones-arquitectura.md).
 
 ## Qué provisiona
 
@@ -15,6 +15,10 @@ Toda la infraestructura de producción se crea con Terraform desde `infrastructu
 | `gke.tf` | `google_container_cluster.gke` | Cluster `bank-usac-gke`, Standard **zonal** en `us-central1-a`, en `bank-usac-vpc`, canal `REGULAR`. El node pool por defecto se elimina |
 | `gke.tf` | `google_container_node_pool.primary` | Node pool `bank-usac-pool`: `e2-medium`, disco `pd-standard` de 30 GB, cluster autoscaler de 1 a 3 nodos, auto-repair y auto-upgrade |
 | `gke.tf` | `google_service_account.github_deployer` + `google_project_iam_member.github_deployer_gke` | Service account `github-deployer` con `roles/container.developer`, que usa `cd-prod.yml` para desplegar |
+| `frontend.tf` | `google_project_service.run` / `.artifactregistry` | Habilita las API de Cloud Run y Artifact Registry |
+| `frontend.tf` | `google_artifact_registry_repository.images` | Repositorio Docker `bank-usac` en `us-central1`, donde `cd-prod.yml` copia `frontend:vX.Y.Z` (Cloud Run no descarga de GHCR) |
+| `frontend.tf` | `google_service_account.frontend_run` | Identidad sin roles con la que corre el servicio Cloud Run `bank-usac-frontend` |
+| `frontend.tf` | IAM de `github-deployer` | `roles/artifactregistry.writer` en el repositorio, `roles/run.admin` y `roles/iam.serviceAccountUser` sobre `frontend-run`, para publicar la imagen y desplegar |
 
 El cluster va en la **misma VPC** que Cloud SQL porque el peering de Cloud SQL no es transitivo: desde otra VPC no se llegaría a las IP privadas de las bases.
 
@@ -40,6 +44,8 @@ El cluster va en la **misma VPC** que Cloud SQL porque el peering de Cloud SQL n
 | `gke_cluster_name` | Variable `GKE_CLUSTER` de GitHub |
 | `gke_location` | Variable `GKE_LOCATION` de GitHub |
 | `github_deployer_email` | Service account para crear la llave de `GCP_SA_KEY` |
+| `frontend_registry` | Variable `GAR_REPOSITORY` de GitHub (`us-central1-docker.pkg.dev/<proyecto>/bank-usac`) |
+| `frontend_run_service_account` | Variable `FRONTEND_RUN_SA` de GitHub |
 
 Las IP cambian en cada `apply` desde cero: siempre se leen de los outputs, no se copian en la documentación ni en los manifiestos.
 
@@ -72,7 +78,8 @@ Lo más simple es **Cloud Shell**, que ya trae `gcloud`, `terraform` y `git`.
    ```bash
    gcloud config set project elevated-range-509623-j8
    gcloud services enable compute.googleapis.com servicenetworking.googleapis.com \
-     sqladmin.googleapis.com container.googleapis.com iam.googleapis.com
+     sqladmin.googleapis.com container.googleapis.com iam.googleapis.com \
+     run.googleapis.com artifactregistry.googleapis.com
    ```
 2. Aplicar (unos 20–30 min: 5 Cloud SQL + GKE):
    ```bash
@@ -90,7 +97,7 @@ Lo más simple es **Cloud Shell**, que ya trae `gcloud`, `terraform` y `git`.
    Pegar el contenido en el secret `GCP_SA_KEY` y **borrar** `key.json`.
 4. Configurar GitHub (Settings → Secrets and variables → Actions), según [CI/CD — Producción](04-ci-cd.md#producción):
    - Secrets: `GCP_SA_KEY`, `PROD_DB_PASSWORD` (la misma de `TF_VAR_db_password`), `GHCR_PULL_TOKEN`.
-   - Variables: `GKE_CLUSTER`, `GKE_LOCATION`, `PROD_DB_PRIVATE_IPS` (de los outputs).
+   - Variables: `GKE_CLUSTER`, `GKE_LOCATION`, `PROD_DB_PRIVATE_IPS`, `GAR_REPOSITORY`, `FRONTEND_RUN_SA` (de los outputs).
 5. A partir de aquí, producción se despliega solo por pipeline: rama `release/X.Y.Z` → tag `vX.Y.Z` → merge a `main` → `cd-prod.yml`.
 
 Para borrar todo después de la calificación: `terraform destroy` (el bucket del estado se borra aparte).

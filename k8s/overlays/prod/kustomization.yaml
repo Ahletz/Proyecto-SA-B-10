@@ -4,8 +4,8 @@
 # - DB: Cloud SQL fuera del cluster (Terraform de Integrante 2). cd-prod.yml reemplaza
 #   __<SERVICIO>_DB_HOST__ con las IP privadas (output db_private_ips) y crea el Secret
 #   bank-db-secret desde los secretos de GitHub; aquí no hay credenciales.
-# - El frontend no corre en el cluster: va en Cloud Run/VM (sección 1 del plan) y
-#   consume el Gateway por su LoadBalancer.
+# - El frontend no corre en el cluster: cd-prod.yml lo publica en Cloud Run y su nginx
+#   reenvía /api al LoadBalancer del Gateway.
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 namespace: prod
