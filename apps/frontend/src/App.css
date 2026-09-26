@@ -447,3 +447,22 @@ button:disabled{
     grid-template-columns:1fr;
   }
 }
+
+.field-error{
+  color:#b42318;
+  font-weight:500;
+}
+
+.form input[aria-invalid="true"]{
+  border-color:#b42318;
+}
+
+.button-link{
+  display:inline-block;
+  padding:10px 12px;
+  border-radius:8px;
+  background:#0b4db5;
+  color:white;
+  text-align:center;
+  text-decoration:none;
+}
