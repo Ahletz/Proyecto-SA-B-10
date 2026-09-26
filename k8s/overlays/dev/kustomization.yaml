@@ -1,0 +1,18 @@
+# Ambiente dev: se despliega automáticamente en cada merge a develop (.github/workflows/cd-dev.yml).
+# El pipeline fija la versión de cada imagen con `kustomize edit set image`; aquí nunca se usa `latest`.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: dev
+resources:
+  - namespace.yaml
+  - ../../base
+components:
+  - ../../components/autoscaling
+images:
+  - { name: bank-usac/customer-service, newTag: local }
+  - { name: bank-usac/account-service, newTag: local }
+  - { name: bank-usac/transaction-service, newTag: local }
+  - { name: bank-usac/payment-service, newTag: local }
+  - { name: bank-usac/notification-audit-service, newTag: local }
+  - { name: bank-usac/api-gateway, newTag: local }
+  - { name: bank-usac/frontend, newTag: local }

@@ -1,0 +1,49 @@
+---
+title: C4 Nivel 3 — Payment Service (Fase 2)
+config:
+  layout: elk
+  flowchart:
+    wrappingWidth: 260
+---
+flowchart TB
+    gateway["API Gateway\nconsulta de pagos (ADMIN, CASHIER)"]
+    rabbit{{"RabbitMQ\nbank.events · .retry · .dlx"}}
+
+    subgraph pay["Payment Service — NestJS :3005"]
+        direction TB
+        controller["PaymentController\nGET /api/payments\nGET /api/payments/transaction/:id"]
+        consumer["PaymentConsumer\naccount.funds.reserved"]
+        service["PaymentService\nvalida monto (INVALID_AMOUNT) y límite\n(PAYMENT_LIMIT_EXCEEDED, PAYMENT_MAX_AMOUNT)\nun pago por transactionId"]
+        simulator["simulateExternalProcessor()\nprocesador de pagos externo simulado:\nSUCCESS · FAILURE (10 %) · TIMEOUT (5 %, espera 3 s)\ntasas por variable de entorno"]
+        rabbitsvc["RabbitService\npub/sub + retry/DLQ,\ntermina el proceso si cae la conexión"]
+
+        payrepo["Repository&lt;PaymentEntity&gt;"]
+        procrepo["Repository&lt;ProcessedEventEntity&gt;\nidempotencia por eventId"]
+    end
+
+    db[("bank_payment\npayments · processed_events")]
+
+    gateway -->|"HTTP de borde"| controller
+    rabbit -->|"account.funds.reserved"| rabbitsvc
+    rabbitsvc --> consumer
+    consumer --> service
+    controller --> service
+    service -->|"monto válido"| simulator
+    service -->|"payment.approved ·\npayment.rejected (reason: EXTERNAL_FAILURE,\nTIMEOUT, INVALID_AMOUNT,\nPAYMENT_LIMIT_EXCEEDED)"| rabbitsvc
+    rabbitsvc -->|"publish"| rabbit
+
+    service --> payrepo
+    service -->|"deduplica"| procrepo
+    payrepo -->|"TypeORM"| db
+    procrepo -->|"TypeORM"| db
+
+    classDef edge fill:#1f6fc0,color:#fff,stroke:#0b4db5
+    classDef svc fill:#dbe8fb,color:#172033,stroke:#1f6fc0
+    classDef port fill:#fff,color:#172033,stroke:#1f6fc0,stroke-dasharray:4 3
+    classDef infra fill:#e5e7eb,color:#172033,stroke:#6b7280
+    classDef dbc fill:#fff7e6,color:#172033,stroke:#b54708
+    class gateway edge
+    class controller,consumer,service,simulator,rabbitsvc svc
+    class payrepo,procrepo port
+    class rabbit infra
+    class db dbc

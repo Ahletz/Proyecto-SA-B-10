@@ -10,6 +10,8 @@ export class AccountEntity {
   @Column({ type: 'varchar', length: 20 }) type: AccountType;
   @Column({ type: 'numeric', precision: 18, scale: 2, default: 0 }) balance: string;
   @Column({ name: 'reserved_balance', type: 'numeric', precision: 18, scale: 2, default: 0 }) reservedBalance: string;
+  @Column({ name: 'min_balance', type: 'numeric', precision: 18, scale: 2, default: 0 }) minBalance: string;
+  @Column({ name: 'fee_amount', type: 'numeric', precision: 18, scale: 2, nullable: true }) feeAmount: string | null;
   @Column({ type: 'varchar', length: 20, default: 'ACTIVE' }) status: AccountStatus;
   @Column({ name: 'created_at', type: 'timestamptz' }) createdAt: Date;
   @Column({ name: 'last_activity_at', type: 'timestamptz' }) lastActivityAt: Date;

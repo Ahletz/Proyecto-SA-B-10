@@ -1,0 +1,19 @@
+# Requests/limits de CPU y memoria, rolling update sin downtime y HPA al 80 % de CPU
+# para los 5 microservicios (sección 2.5 del plan de distribución).
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+resources:
+  - hpa.yaml
+patches:
+  - path: scaling-patch.yaml
+    target:
+      kind: Deployment
+      name: "^(customer-service|account-service|transaction-service|payment-service|notification-audit-service)$"
+  - path: resources-node.yaml
+    target:
+      kind: Deployment
+      name: "^(account-service|transaction-service|payment-service)$"
+  - path: resources-spring.yaml
+    target:
+      kind: Deployment
+      name: "^(customer-service|notification-audit-service)$"

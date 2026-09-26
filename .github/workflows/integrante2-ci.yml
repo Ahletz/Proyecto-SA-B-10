@@ -1,0 +1,81 @@
+name: Integrante 2 CI
+
+# Account Service y Payment Service (NestJS).
+
+on:
+  push:
+    branches:
+      - 'feature/**'
+    paths:
+      - 'apps/account-service/**'
+      - 'apps/payment-service/**'
+      - 'infrastructure/databases/account/**'
+      - 'infrastructure/databases/payment/**'
+      - '.github/workflows/integrante2-ci.yml'
+      - '.github/workflows/reusable-node-ci.yml'
+
+  pull_request:
+    branches:
+      - develop
+    paths:
+      - 'apps/account-service/**'
+      - 'apps/payment-service/**'
+      - 'infrastructure/databases/account/**'
+      - 'infrastructure/databases/payment/**'
+      - '.github/workflows/integrante2-ci.yml'
+      - '.github/workflows/reusable-node-ci.yml'
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: integrante2-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Build selectivo: cada job corre solo si cambió su carpeta (o este workflow).
+  changes:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      account-service: ${{ steps.filter.outputs.account-service }}
+      payment-service: ${{ steps.filter.outputs.payment-service }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Detect changes per service
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          base: develop
+          filters: |
+            workflow: &workflow
+              - '.github/workflows/integrante2-ci.yml'
+              - '.github/workflows/reusable-node-ci.yml'
+            account-service:
+              - *workflow
+              - 'apps/account-service/**'
+              - 'infrastructure/databases/account/**'
+            payment-service:
+              - *workflow
+              - 'apps/payment-service/**'
+              - 'infrastructure/databases/payment/**'
+
+  account-service:
+    name: Account - Build and Test
+    needs: changes
+    if: needs.changes.outputs.account-service == 'true'
+    uses: ./.github/workflows/reusable-node-ci.yml
+    with:
+      service: account-service
+
+  payment-service:
+    name: Payment - Build and Test
+    needs: changes
+    if: needs.changes.outputs.payment-service == 'true'
+    uses: ./.github/workflows/reusable-node-ci.yml
+    with:
+      service: payment-service

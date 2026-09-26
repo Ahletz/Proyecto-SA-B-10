@@ -37,7 +37,7 @@ services:
     healthcheck: { test: ["CMD-SHELL","pg_isready -U payment_user -d bank_payment"], interval: 5s, timeout: 3s, retries: 20 }
 
   rabbitmq:
-    image: rabbitmq:4-management
+    image: rabbitmq:4.3.6-management
     container_name: bank-rabbitmq
     environment:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER:-rabbit_user}
@@ -76,6 +76,8 @@ services:
   account-service:
     build: { context: ../apps/account-service }
     container_name: bank-account-service
+    # Si se cae la conexión con RabbitMQ el servicio termina; Docker lo vuelve a levantar.
+    restart: unless-stopped
     environment:
       PORT: 3004
       DB_HOST: account-db
@@ -94,6 +96,8 @@ services:
   transaction-service:
     build: { context: ../apps/transaction-service }
     container_name: bank-transaction-service
+    # Si se cae la conexión con RabbitMQ el servicio termina; Docker lo vuelve a levantar.
+    restart: unless-stopped
     environment:
       PORT: 3003
       DB_HOST: transaction-db
@@ -118,6 +122,8 @@ services:
   payment-service:
     build: { context: ../apps/payment-service }
     container_name: bank-payment-service
+    # Si se cae la conexión con RabbitMQ el servicio termina; Docker lo vuelve a levantar.
+    restart: unless-stopped
     environment:
       PORT: 3005
       DB_HOST: payment-db
@@ -129,6 +135,9 @@ services:
       RABBITMQ_URL: amqp://${RABBITMQ_DEFAULT_USER:-rabbit_user}:${RABBITMQ_DEFAULT_PASS:-rabbit_password}@rabbitmq:5672
       RABBITMQ_QUEUE: payment-service.events
       PAYMENT_MAX_AMOUNT: 1000000
+      PAYMENT_SIMULATE_FAILURE_RATE: 0.1
+      PAYMENT_SIMULATE_TIMEOUT_RATE: 0.05
+      PAYMENT_SIMULATE_TIMEOUT_MS: 3000
     expose: ["3005"]
     depends_on:
       payment-db: { condition: service_healthy }
@@ -160,6 +169,8 @@ services:
   api-gateway:
     build: { context: ../apps/api-gateway }
     container_name: bank-api-gateway
+    # Si se cae la conexión con RabbitMQ el servicio termina; Docker lo vuelve a levantar.
+    restart: unless-stopped
     environment:
       PORT: 8080
       JWT_SECRET: ${JWT_SECRET:-bank-usac-demo-secret-change-before-production-2026}

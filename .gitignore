@@ -19,6 +19,9 @@
 .DS_Store
 Thumbs.db
 
+# Graph
+graphify-out
+
 # Runtime data
 infrastructure/broker/rabbitmq/data/
 infrastructure/broker/rabbitmq/log/

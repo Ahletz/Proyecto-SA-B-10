@@ -1,0 +1,79 @@
+---
+title: C4 Nivel 2 — Contenedores de Bank USAC (Fase 2)
+config:
+  layout: elk
+  flowchart:
+    wrappingWidth: 260
+---
+flowchart TB
+    usuarios["👤 Cliente · Cajero · Administrador"]
+
+    subgraph cicd["CI/CD — GitHub"]
+        direction LR
+        actions["GitHub Actions\nCI por integrante · cd-dev · release · cd-prod"]
+        ghcr[("GHCR\nghcr.io/&lt;owner&gt;/bank-usac/*\ntags sha-&lt;commit&gt; y vX.Y.Z\nnunca latest")]
+        actions -->|"build + push"| ghcr
+    end
+
+    frontend["Frontend\nReact + TypeScript (nginx :3000)\nShell por rol, transferencias, historial\ndev: pod del cluster · prod: Cloud Run"]
+
+    subgraph k8s["Cluster Kubernetes — namespace dev (kind) / prod (GKE)"]
+        gateway["API Gateway\nNestJS :8080\nJWT, roles, ownership,\nX-Correlation-Id"]
+
+        subgraph servicios["Microservicios · HPA 1–5 réplicas al 80 % CPU · rolling update"]
+            direction LR
+            customer["Customer\nSpring Boot :8081\nIdentidad, JWT, KYC"]
+            account["Account\nNestJS :3004\nCuentas, reservas,\nsaldo mínimo"]
+            transaction["Transaction\nNestJS :3003\nSaga, historial,\nproyección KYC"]
+            payment["Payment\nNestJS :3005\nPago simulado\nSUCCESS/FAILURE/TIMEOUT"]
+            notification["Notification & Audit\nSpring Boot :8082\nAuditoría, correo,\nclasificación"]
+        end
+
+        rabbit{{"RabbitMQ\nbank.events · .retry · .dlx"}}
+        mailhog["MailHog\nSMTP (dev)"]
+    end
+
+    subgraph datos["PostgreSQL fuera del cluster — dev: Docker Compose · prod: Cloud SQL (PostgreSQL 17, IP privada)"]
+        direction LR
+        dbc[("bank_customer")]
+        dba[("bank_account")]
+        dbt[("bank_transaction")]
+        dbp[("bank_payment")]
+        dbn[("bank_notification")]
+    end
+
+    usuarios -->|"HTTPS"| frontend
+    frontend -->|"REST + JWT\n(prod: proxy /api de nginx)"| gateway
+    gateway -->|"HTTP de borde"| customer
+    gateway -->|"HTTP de borde"| account
+    gateway -->|"historial y estado"| transaction
+    gateway -->|"consulta pagos"| payment
+    gateway -->|"auditoría y notificaciones"| notification
+    gateway -->|"publica transaction.transfer.requested"| rabbit
+
+    rabbit <-->|"customer.*"| customer
+    rabbit <-->|"account.*"| account
+    rabbit <-->|"transaction.* · Saga"| transaction
+    rabbit <-->|"payment.*"| payment
+    rabbit -->|"todos los eventos"| notification
+    notification -->|"SMTP"| mailhog
+
+    customer --> dbc
+    account --> dba
+    transaction --> dbt
+    payment --> dbp
+    notification --> dbn
+
+    ghcr -.->|"imágenes versionadas"| k8s
+    ghcr -.->|"frontend vX.Y.Z\n(vía Artifact Registry)"| frontend
+
+    classDef person fill:#0b2347,color:#fff,stroke:#0b2347
+    classDef edge fill:#1f6fc0,color:#fff,stroke:#0b4db5
+    classDef svc fill:#dbe8fb,color:#172033,stroke:#1f6fc0
+    classDef infra fill:#e5e7eb,color:#172033,stroke:#6b7280
+    classDef db fill:#fff7e6,color:#172033,stroke:#b54708
+    class usuarios person
+    class frontend,gateway edge
+    class customer,account,transaction,payment,notification svc
+    class rabbit,mailhog,actions,ghcr infra
+    class dbc,dba,dbt,dbp,dbn db

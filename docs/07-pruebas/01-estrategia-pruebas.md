@@ -1,7 +1,13 @@
 # 16. Estrategia de pruebas
 
 ## Validación estática/build
-La validación del proyecto compila los servicios, valida Docker Compose y ejecuta las pruebas disponibles de Transaction/Customer según el entorno.
+El CI de cada rama `feature/**` compila los servicios y ejecuta sus pruebas unitarias; cualquier fallo detiene el pipeline (detalle en [CI/CD](../04-despliegue/04-ci-cd.md)).
+
+| Servicio | Herramienta | Comando |
+|---|---|---|
+| Customer, Notification & Audit | JUnit (Maven) | `mvn -B clean test` |
+| Account, Payment, Transaction, API Gateway | Vitest | `npm test` |
+| Frontend | Vitest | `npm test` (filtros del historial, estados de la Saga, errores HTTP) |
 
 ## E2E happy path
 `tests/e2e/smoke.sh` ejecuta:

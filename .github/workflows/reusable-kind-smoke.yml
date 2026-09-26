@@ -1,0 +1,110 @@
+name: Reusable - Deploy kind + smoke test
+
+# Levanta un cluster kind efímero, despliega el overlay `dev` con las imágenes
+# <prefix>/<servicio>:<tag> ya publicadas en GHCR y corre el smoke test
+# end-to-end. Las bases de datos corren FUERA del cluster, igual que en
+# scripts/project/start-k8s.sh. Lo usan cd-dev.yml y release.yml:
+#
+#   jobs:
+#     smoke:
+#       needs: images
+#       uses: ./.github/workflows/reusable-kind-smoke.yml
+#       with:
+#         prefix: ghcr.io/<owner>/bank-usac
+#         tag: sha-abc1234
+
+on:
+  workflow_call:
+    inputs:
+      prefix:
+        description: Prefijo de las imágenes en el registry (sin el nombre del servicio)
+        required: true
+        type: string
+      tag:
+        description: Tag de las imágenes a desplegar
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  kind-smoke:
+    name: Deploy kind (namespace dev) + smoke test
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    env:
+      PREFIX: ${{ inputs.prefix }}
+      TAG: ${{ inputs.tag }}
+      SERVICES: >-
+        customer-service account-service transaction-service payment-service
+        notification-audit-service api-gateway frontend
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Create kind cluster
+        uses: helm/kind-action@v1
+        with:
+          config: k8s/config/kind-config.yaml
+          cluster_name: bank-usac
+
+      - name: Start databases outside the cluster
+        working-directory: infrastructure
+        run: |
+          cp .env.example .env
+          docker compose up -d --wait customer-db account-db transaction-db payment-db notification-db
+
+      - name: Load images into kind
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+          for s in $SERVICES; do
+            docker pull "$PREFIX/$s:$TAG"
+            kind load docker-image --name bank-usac "$PREFIX/$s:$TAG"
+          done
+
+      - name: Install metrics-server (needed by HPA)
+        run: |
+          kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/download/v0.7.2/components.yaml
+          kubectl -n kube-system patch deployment metrics-server --type=json \
+            -p '[{"op":"add","path":"/spec/template/spec/containers/0/args/-","value":"--kubelet-insecure-tls"}]'
+
+      - name: Set image versions
+        working-directory: k8s/overlays/dev
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh | bash -s -- 5.8.1 "$RUNNER_TEMP"
+          for s in $SERVICES; do
+            "$RUNNER_TEMP/kustomize" edit set image "bank-usac/$s=$PREFIX/$s:$TAG"
+          done
+
+      - name: Deploy to namespace dev
+        run: |
+          HOST_GATEWAY=$(docker inspect bank-usac-control-plane -f '{{(index .NetworkSettings.Networks "kind").Gateway}}')
+          echo "External DB host from kind = $HOST_GATEWAY"
+          kubectl kustomize k8s/overlays/dev | sed "s/__HOST_GATEWAY__/$HOST_GATEWAY/g" | kubectl apply -f -
+          for d in rabbitmq $SERVICES; do
+            kubectl -n dev rollout status "deployment/$d" --timeout=300s
+          done
+          kubectl -n dev get pods -o wide
+
+      - name: Smoke test
+        run: API_BASE=http://localhost:30080 tests/e2e/smoke.sh
+
+      - name: HPA status
+        run: |
+          kubectl -n kube-system rollout status deployment/metrics-server --timeout=120s || true
+          kubectl -n dev get hpa
+
+      - name: Diagnostics on failure
+        if: failure()
+        run: |
+          kubectl -n dev get all || true
+          kubectl -n dev describe pods || true
+          for d in $SERVICES; do
+            echo "::group::logs $d"
+            kubectl -n dev logs "deployment/$d" --tail=200 || true
+            echo "::endgroup::"
+          done

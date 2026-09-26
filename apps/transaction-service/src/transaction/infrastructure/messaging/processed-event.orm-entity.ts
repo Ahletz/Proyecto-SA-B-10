@@ -19,11 +19,16 @@ export class ProcessedEventOrmEntity {
   })
   eventType: string;
 
+  // varchar: el correlationId de eventos ajenos puede no ser UUID.
+  // nullable para que DB_SYNCHRONIZE pueda migrar la columna uuid vieja
+  // en tablas con datos (se usa solo para diagnóstico).
   @Column({
     name: 'correlation_id',
-    type: 'uuid',
+    type: 'varchar',
+    length: 100,
+    nullable: true,
   })
-  correlationId: string;
+  correlationId: string | null;
 
   @Column({
     name: 'processed_at',

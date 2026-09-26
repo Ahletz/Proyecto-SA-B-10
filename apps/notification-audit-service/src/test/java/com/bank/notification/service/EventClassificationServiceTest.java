@@ -64,12 +64,13 @@ class EventClassificationServiceTest {
         var payload = mapper.readTree("""
             {
               "paymentId": "PAY-1",
-              "resultado": "FAILURE"
+              "status": "REJECTED",
+              "reason": "EXTERNAL_FAILURE"
             }
             """);
 
         var result = service.classify(
-            "payment.result.simulated",
+            "payment.rejected",
             payload
         );
 
@@ -84,12 +85,13 @@ class EventClassificationServiceTest {
         var payload = mapper.readTree("""
             {
               "paymentId": "PAY-1",
-              "resultado": "TIMEOUT"
+              "status": "REJECTED",
+              "reason": "TIMEOUT"
             }
             """);
 
         var result = service.classify(
-            "payment.result.simulated",
+            "payment.rejected",
             payload
         );
 
@@ -145,6 +147,51 @@ class EventClassificationServiceTest {
         assertEquals(
             "account",
             result.origin()
+        );
+    }
+
+    @Test
+    void rejectedFundsIsWarning()
+            throws Exception {
+
+        var payload = mapper.readTree("""
+            {
+              "transactionId": "TX-1",
+              "reason": "INSUFFICIENT_FUNDS"
+            }
+            """);
+
+        var result = service.classify(
+            "account.funds.rejected",
+            payload
+        );
+
+        assertEquals(
+            NotificationSeverity.WARNING,
+            result.severity()
+        );
+    }
+
+    @Test
+    void compensatedTransactionIsWarning()
+            throws Exception {
+
+        var payload = mapper.readTree("""
+            {
+              "transactionId": "TX-1",
+              "status": "COMPENSATED",
+              "reason": "PAYMENT_TIMEOUT"
+            }
+            """);
+
+        var result = service.classify(
+            "transaction.compensated",
+            payload
+        );
+
+        assertEquals(
+            NotificationSeverity.WARNING,
+            result.severity()
         );
     }
 }

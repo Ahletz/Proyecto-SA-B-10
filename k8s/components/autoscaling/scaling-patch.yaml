@@ -1,0 +1,8 @@
+# El HPA administra las réplicas, por eso se quita spec.replicas del Deployment.
+- op: remove
+  path: /spec/replicas
+- op: add
+  path: /spec/strategy
+  value:
+    type: RollingUpdate
+    rollingUpdate: { maxUnavailable: 0, maxSurge: 1 }

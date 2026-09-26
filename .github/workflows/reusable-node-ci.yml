@@ -1,0 +1,86 @@
+name: Reusable - Node service CI
+
+# Build + test (+ lint opcional) de un microservicio Node/NestJS.
+# Cualquier integrante puede llamarlo desde su workflow:
+#
+#   jobs:
+#     mi-servicio:
+#       uses: ./.github/workflows/reusable-node-ci.yml
+#       with:
+#         service: account-service
+#         lint: false
+
+on:
+  workflow_call:
+    inputs:
+      service:
+        description: Carpeta del servicio dentro de apps/
+        required: true
+        type: string
+      lint:
+        description: Ejecutar `npm run lint`
+        required: false
+        type: boolean
+        default: false
+      test:
+        description: Ejecutar `npm test`
+        required: false
+        type: boolean
+        default: true
+      docker:
+        description: Verificar que la imagen Docker construye (solo en push)
+        required: false
+        type: boolean
+        default: true
+
+jobs:
+  build-test:
+    name: ${{ inputs.service }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    defaults:
+      run:
+        working-directory: apps/${{ inputs.service }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: apps/${{ inputs.service }}/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Lint
+        if: inputs.lint
+        run: npm run lint
+
+      - name: Test
+        if: inputs.test
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+      - name: Set up Docker Buildx
+        if: inputs.docker && github.event_name == 'push'
+        uses: docker/setup-buildx-action@v3
+
+      # Caché de capas en GitHub Actions: lee también la que deja cd-dev.yml para el mismo servicio.
+      - name: Docker sanity check
+        if: inputs.docker && github.event_name == 'push'
+        uses: docker/build-push-action@v6
+        with:
+          context: apps/${{ inputs.service }}
+          push: false
+          tags: bank-usac/${{ inputs.service }}:ci
+          cache-from: |
+            type=gha,scope=ci-${{ inputs.service }}
+            type=gha,scope=${{ inputs.service }}
+          cache-to: type=gha,mode=max,scope=ci-${{ inputs.service }}

@@ -1,0 +1,108 @@
+---
+title: Modelo de datos — una base por microservicio (Fase 2)
+---
+erDiagram
+    direction LR
+    %% bank_customer — Customer Service (JPA, ddl-auto: update)
+    CUSTOMERS["bank_customer · customers"] {
+        bigint id PK "IDENTITY"
+        varchar email UK
+        varchar username UK
+        varchar password "hash BCrypt"
+        varchar status "PENDING_ACTIVATION · ACTIVE"
+        varchar role "CLIENT · CASHIER · ADMIN"
+        varchar identity_status
+        varchar kyc_status "PENDING · VERIFIED · REJECTED"
+        varchar full_name
+        varchar document_number UK
+        varchar document_photo
+        date birth_date
+        varchar address
+        timestamptz created_at
+        varchar activation_token UK
+    }
+
+    %% bank_account — Account Service (TypeORM)
+    ACCOUNTS["bank_account · accounts"] {
+        uuid account_id PK
+        varchar customer_id "id de Customer (sin FK)"
+        varchar type "MONETARY · SAVINGS"
+        numeric balance
+        numeric reserved_balance
+        numeric min_balance "SAVINGS 50 por defecto"
+        numeric fee_amount "comisión opcional"
+        varchar status "ACTIVE · INACTIVE"
+        timestamptz created_at
+        timestamptz last_activity_at
+    }
+    TRANSFER_RESERVATIONS["bank_account · transfer_reservations"] {
+        uuid transaction_id PK "id de Transaction (sin FK)"
+        uuid source_account
+        uuid target_account
+        numeric amount
+        numeric fee_amount
+        varchar status "RESERVED · COMPLETED · RELEASED"
+        timestamptz created_at
+    }
+    ACCOUNT_PROCESSED_EVENTS["bank_account · processed_events"] {
+        uuid event_id PK
+        varchar event_type
+        uuid correlation_id
+        timestamptz processed_at
+    }
+    ACCOUNTS ||..o{ TRANSFER_RESERVATIONS : "source_account / target_account (sin FK)"
+
+    %% bank_transaction — Transaction Service (TypeORM)
+    TRANSACTIONS["bank_transaction · transactions"] {
+        uuid transaction_id PK
+        varchar source_account "id de Account (sin FK)"
+        varchar target_account "id de Account (sin FK)"
+        numeric amount
+        varchar status "PENDING · PROCESSING · COMPLETED · FAILED · COMPENSATING · COMPENSATED"
+        varchar failure_reason "KYC_NOT_VERIFIED · INSUFFICIENT_FUNDS · PAYMENT_*"
+        uuid correlation_id UK
+        timestamptz created_at
+        timestamptz updated_at
+    }
+    CUSTOMER_KYC_STATUS["bank_transaction · customer_kyc_status"] {
+        varchar customer_id PK "proyección de customer.kyc.status.changed"
+        varchar status
+        timestamptz updated_at
+    }
+    TRANSACTION_PROCESSED_EVENTS["bank_transaction · processed_events"] {
+        uuid event_id PK
+        varchar event_type
+        varchar correlation_id "nullable"
+        timestamptz processed_at
+    }
+
+    %% bank_payment — Payment Service (TypeORM)
+    PAYMENTS["bank_payment · payments"] {
+        uuid payment_id PK
+        uuid transaction_id UK "id de Transaction (sin FK)"
+        numeric amount
+        varchar status "APPROVED · REJECTED"
+        varchar reason "EXTERNAL_FAILURE · TIMEOUT · INVALID_AMOUNT · PAYMENT_LIMIT_EXCEEDED"
+        uuid correlation_id
+        timestamptz created_at
+    }
+    PAYMENT_PROCESSED_EVENTS["bank_payment · processed_events"] {
+        uuid event_id PK
+        varchar event_type
+        uuid correlation_id
+        timestamptz processed_at
+    }
+
+    %% bank_notification — Notification & Audit Service (JPA, ddl-auto: update)
+    NOTIFICATION_PROCESSED_EVENTS["bank_notification · processed_events"] {
+        varchar event_id PK
+        varchar event_type
+        int version
+        varchar correlation_id
+        text payload "evento completo (auditoría)"
+        timestamptz event_timestamp
+        timestamptz processed_at
+        varchar severity "INFO · WARNING · ERROR"
+        varchar origin
+        text classification_message
+    }

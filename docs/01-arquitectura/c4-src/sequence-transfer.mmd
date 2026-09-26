@@ -1,0 +1,59 @@
+---
+title: Secuencia — Transferencia exitosa (Fase 2)
+---
+sequenceDiagram
+    autonumber
+    actor C as Cliente
+    participant F as Frontend
+    participant G as API Gateway
+    participant MQ as RabbitMQ
+    participant T as Transaction
+    participant A as Account
+    participant P as Payment
+    participant N as Notification & Audit
+
+    Note over MQ,T: Previo: un ADMIN verifica el KYC (PATCH /api/customers/:id/kyc).<br/>Customer publica customer.kyc.status.changed y Transaction<br/>actualiza su proyección local customer_kyc_status.
+
+    C->>F: elige cuenta origen, destino y monto
+    F->>G: POST /api/transfers + JWT
+    G->>A: GET /api/accounts/:sourceAccount (ownership)
+    A-->>G: customerId de la cuenta
+    G->>MQ: transaction.transfer.requested (correlationId = X-Correlation-Id)
+    G-->>F: 202 { correlationId, status: PENDING }
+
+    MQ->>T: transaction.transfer.requested
+    T->>T: proyección KYC = VERIFIED ✓ · crea transacción PENDING
+    T->>MQ: transaction.created + transaction.status.changed (PENDING)
+
+    MQ->>A: transaction.created
+    A->>A: valida cuentas, saldo mínimo y comisión · reserva fondos
+    A->>MQ: account.funds.reserved
+
+    par Transaction avanza
+        MQ->>T: account.funds.reserved
+        T->>T: PROCESSING
+    and Payment procesa
+        MQ->>P: account.funds.reserved
+        P->>P: procesador externo simulado → SUCCESS
+        P->>MQ: payment.approved
+    end
+
+    MQ->>A: payment.approved
+    A->>A: debita origen, acredita destino, libera reserva
+    A->>MQ: account.transfer.completed
+
+    MQ->>T: account.transfer.completed
+    T->>T: COMPLETED
+    T->>MQ: transaction.completed + transaction.status.changed (APPROVED)
+
+    MQ->>N: todos los eventos (mismo correlationId)
+    N->>N: audita, clasifica (INFO/WARNING/ERROR) y notifica
+    N->>MQ: notification.classified
+
+    loop cada 1,5 s hasta un estado final
+        F->>G: GET /api/transfers/:correlationId
+        G->>T: GET /api/transactions/correlation/:correlationId
+        T-->>G: estado (404 mientras no se consume el comando)
+        G-->>F: estado + failureReason
+    end
+    F-->>C: badge "Completada" y saldo actualizado

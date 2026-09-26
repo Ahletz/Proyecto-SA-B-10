@@ -1,0 +1,56 @@
+---
+title: Secuencia — Transferencia fallida y compensación (Fase 2)
+---
+sequenceDiagram
+    autonumber
+    participant G as API Gateway
+    participant MQ as RabbitMQ
+    participant T as Transaction
+    participant A as Account
+    participant P as Payment
+    participant N as Notification & Audit
+
+    G->>MQ: transaction.transfer.requested
+    MQ->>T: transaction.transfer.requested
+
+    alt Cliente sin KYC verificado
+        T->>T: proyección KYC ≠ VERIFIED → FAILED (KYC_NOT_VERIFIED)
+        T->>MQ: transaction.failed + transaction.status.changed (FAILED)
+        Note over T,A: No se publica transaction.created: Account nunca reserva fondos.
+
+    else Fondos insuficientes o cuenta inactiva
+        T->>MQ: transaction.created + transaction.status.changed (PENDING)
+        MQ->>A: transaction.created
+        A->>A: disponible − saldo mínimo < monto + comisión
+        A->>MQ: account.funds.rejected (INSUFFICIENT_FUNDS / ACCOUNT_NOT_FOUND_OR_INACTIVE)
+        MQ->>T: account.funds.rejected
+        T->>T: FAILED + motivo
+        T->>MQ: transaction.failed + transaction.status.changed (FAILED)
+        Note over A: El saldo no se modifica.
+
+    else Pago rechazado después de reservar (compensación)
+        T->>MQ: transaction.created + transaction.status.changed (PENDING)
+        MQ->>A: transaction.created
+        A->>MQ: account.funds.reserved
+        MQ->>T: account.funds.reserved
+        T->>T: PROCESSING
+        MQ->>P: account.funds.reserved
+        P->>P: límite / monto inválido, o simulado FAILURE (10 %) / TIMEOUT (5 %, 3 s)
+        P->>MQ: payment.rejected (PAYMENT_LIMIT_EXCEEDED / INVALID_AMOUNT / EXTERNAL_FAILURE / TIMEOUT)
+        par Transaction compensa
+            MQ->>T: payment.rejected
+            T->>T: COMPENSATING · guarda motivo PAYMENT_*
+        and Account libera la reserva
+            MQ->>A: payment.rejected
+            A->>A: reservedBalance −= monto · reserva RELEASED
+            A->>MQ: account.funds.released
+        end
+        MQ->>T: account.funds.released
+        T->>T: COMPENSATED
+        T->>MQ: transaction.compensated + transaction.status.changed (FAILED)
+        Note over A: El débito nunca se aplicó: el saldo original queda intacto.<br/>TIMEOUT no se reintenta: se compensa igual que un rechazo.
+    end
+
+    MQ->>N: todos los eventos (mismo correlationId)
+    N->>N: audita, clasifica y notifica
+    Note over G,T: El frontend consulta GET /api/transfers/:correlationId y muestra<br/>el motivo (failureReason) y qué puede hacer el cliente.

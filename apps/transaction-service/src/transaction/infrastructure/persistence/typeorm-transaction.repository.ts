@@ -1,8 +1,12 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Brackets, Repository } from 'typeorm';
 
-import { TransactionRepository } from '../../application/ports/transaction.repository';
+import {
+  TransactionHistoryQuery,
+  TransactionPage,
+  TransactionRepository,
+} from '../../application/ports/transaction.repository';
 import { Transaction } from '../../domain/entities/transaction.entity';
 import { TransactionOrmEntity } from './transaction.orm-entity';
 
@@ -43,6 +47,47 @@ export class TypeOrmTransactionRepository
     return entity ? this.toDomain(entity) : null;
   }
 
+  async findByAccount(
+    query: TransactionHistoryQuery,
+  ): Promise<TransactionPage> {
+    const qb = this.repository
+      .createQueryBuilder('t')
+      .where(
+        new Brackets((account) => {
+          account
+            .where('t.sourceAccount = :accountId')
+            .orWhere('t.targetAccount = :accountId');
+        }),
+      )
+      .setParameter('accountId', query.accountId);
+
+    if (query.from) {
+      qb.andWhere('t.createdAt >= :from', { from: query.from });
+    }
+
+    if (query.to) {
+      qb.andWhere('t.createdAt <= :to', { to: query.to });
+    }
+
+    if (query.statuses?.length) {
+      qb.andWhere('t.status IN (:...statuses)', {
+        statuses: query.statuses,
+      });
+    }
+
+    const [entities, total] = await qb
+      .orderBy('t.createdAt', 'DESC')
+      .addOrderBy('t.transactionId', 'DESC')
+      .skip((query.page - 1) * query.size)
+      .take(query.size)
+      .getManyAndCount();
+
+    return {
+      items: entities.map((entity) => this.toDomain(entity)),
+      total,
+    };
+  }
+
   private toPersistence(
     transaction: Transaction,
   ): TransactionOrmEntity {
@@ -53,6 +98,7 @@ export class TypeOrmTransactionRepository
     entity.targetAccount = transaction.targetAccount;
     entity.amount = transaction.amount.toString();
     entity.status = transaction.status;
+    entity.failureReason = transaction.failureReason;
     entity.correlationId = transaction.correlationId;
     entity.createdAt = transaction.createdAt;
     entity.updatedAt = transaction.updatedAt;
@@ -72,6 +118,7 @@ export class TypeOrmTransactionRepository
       entity.correlationId,
       entity.createdAt,
       entity.updatedAt,
+      entity.failureReason ?? null,
     );
   }
 }

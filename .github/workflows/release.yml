@@ -1,0 +1,170 @@
+name: Release
+
+# Rama release/X.Y.Z: publica en GHCR las imágenes finales :vX.Y.Z y crea el
+# tag git vX.Y.Z. El despliegue a producción al hacer merge a main usará
+# exactamente estas imágenes.
+#
+# Flujo:
+#   1. version  - valida el nombre de la rama y que el tag no exista.
+#   2. images   - construye y publica candidatas :vX.Y.Z-rc.<run>.
+#   3. smoke    - despliega las candidatas en kind y corre el smoke test.
+#   4. promote  - copia cada candidata a :vX.Y.Z sin recompilar (mismo digest).
+#   5. tag      - crea y publica el tag git vX.Y.Z.
+#
+# Si algo falla antes de promote, :vX.Y.Z no existe y basta con corregir en la
+# misma rama release/X.Y.Z. Después de publicar, un fix va en
+# release/X.Y.(Z+1): un tag ya publicado no se reescribe (nunca `latest`).
+
+on:
+  push:
+    branches:
+      - 'release/**'
+
+permissions:
+  contents: write
+  packages: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  SERVICES: >-
+    customer-service account-service transaction-service payment-service
+    notification-audit-service api-gateway frontend
+
+jobs:
+  version:
+    name: Resolve version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+      rc: ${{ steps.v.outputs.rc }}
+      prefix: ${{ steps.v.outputs.prefix }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Validate release branch and tag
+        id: v
+        run: |
+          VERSION="${GITHUB_REF_NAME#release/}"
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::La rama debe llamarse release/X.Y.Z (recibido: $GITHUB_REF_NAME)"
+            exit 1
+          fi
+          if git ls-remote --exit-code --tags origin "refs/tags/v$VERSION" >/dev/null; then
+            echo "::error::El tag v$VERSION ya existe. Abre release/<siguiente versión> para publicar cambios nuevos."
+            exit 1
+          fi
+          {
+            echo "version=$VERSION"
+            echo "rc=v$VERSION-rc.$GITHUB_RUN_NUMBER"
+            echo "prefix=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/bank-usac"
+          } >> "$GITHUB_OUTPUT"
+
+  images:
+    name: Build candidate - ${{ matrix.service }}
+    needs: version
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    strategy:
+      fail-fast: true
+      matrix:
+        service:
+          - customer-service
+          - account-service
+          - transaction-service
+          - payment-service
+          - notification-audit-service
+          - api-gateway
+          - frontend
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: apps/${{ matrix.service }}
+          push: true
+          tags: ${{ needs.version.outputs.prefix }}/${{ matrix.service }}:${{ needs.version.outputs.rc }}
+          # Frontend de producción: /api al mismo origen; nginx lo reenvía al Gateway
+          # (API_UPSTREAM lo fija cd-prod.yml en Cloud Run). Los demás servicios ignoran el argumento.
+          build-args: |
+            VITE_API_BASE_URL=
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.version=v${{ needs.version.outputs.version }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          cache-from: type=gha,scope=release-${{ matrix.service }}
+          cache-to: type=gha,mode=max,scope=release-${{ matrix.service }}
+
+  smoke:
+    name: Smoke test candidates
+    needs: [version, images]
+    uses: ./.github/workflows/reusable-kind-smoke.yml
+    with:
+      prefix: ${{ needs.version.outputs.prefix }}
+      tag: ${{ needs.version.outputs.rc }}
+
+  promote:
+    name: Promote images to v${{ needs.version.outputs.version }}
+    needs: [version, smoke]
+    runs-on: ubuntu-latest
+
+    env:
+      PREFIX: ${{ needs.version.outputs.prefix }}
+      RC: ${{ needs.version.outputs.rc }}
+      VERSION: v${{ needs.version.outputs.version }}
+
+    steps:
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # imagetools copia el manifiesto en el registry: :vX.Y.Z apunta al mismo
+      # digest que la candidata que pasó el smoke test.
+      - name: Tag candidates as final version
+        run: |
+          for s in $SERVICES; do
+            docker buildx imagetools create --tag "$PREFIX/$s:$VERSION" "$PREFIX/$s:$RC"
+            docker buildx imagetools inspect "$PREFIX/$s:$VERSION" | head -3
+          done
+
+  tag:
+    name: Create tag v${{ needs.version.outputs.version }}
+    needs: [version, promote]
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Push tag
+        env:
+          VERSION: v${{ needs.version.outputs.version }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$VERSION" -m "Release $VERSION"
+          git push origin "$VERSION"

@@ -50,14 +50,15 @@ class CustomerEventListenerTest {
         String json = """
             {
               "eventId": "evt-1",
-              "eventType": "payment.result.simulated",
+              "eventType": "payment.rejected",
               "version": 1,
               "timestamp": "2026-09-22T04:00:00Z",
               "correlationId": "corr-1",
               "payload": {
                 "paymentId": "PAY-1",
                 "transactionId": "TX-1",
-                "resultado": "FAILURE"
+                "status": "REJECTED",
+                "reason": "EXTERNAL_FAILURE"
               }
             }
             """;

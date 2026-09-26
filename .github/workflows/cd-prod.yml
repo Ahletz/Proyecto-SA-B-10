@@ -1,0 +1,217 @@
+name: CD - Deploy prod
+
+# Merge a main: despliega en GKE (namespace prod) las imágenes vX.Y.Z que publicó
+# release.yml, con rolling update sin downtime. Sin pasos manuales (regla 9).
+#
+# La versión es el último tag vX.Y.Z alcanzable desde main (el de la rama
+# release/X.Y.Z que se mergeó). Si alguna imagen de esa versión no existe en GHCR,
+# el workflow falla antes de tocar el cluster.
+#
+# Configuración del repositorio (Settings → Secrets and variables → Actions):
+#   secrets.GCP_SA_KEY          JSON de una service account con rol Kubernetes Engine Developer
+#   secrets.PROD_DB_PASSWORD    var.db_password de infrastructure/terraform
+#   secrets.GHCR_PULL_TOKEN     token con read:packages para que GKE descargue de GHCR
+#   vars.GKE_CLUSTER            nombre del cluster GKE
+#   vars.GKE_LOCATION           zona del cluster (p. ej. us-central1-a)
+#   vars.PROD_DB_PRIVATE_IPS    salida de `terraform output -json db_private_ips`
+#   vars.GAR_REPOSITORY         salida de `terraform output -raw frontend_registry`
+#   vars.FRONTEND_RUN_SA        salida de `terraform output -raw frontend_run_service_account`
+#   vars.GCP_REGION             región de Cloud Run (opcional, por defecto us-central1)
+#
+# El frontend no corre en el cluster: se publica en Cloud Run con la misma versión
+# (copia de la imagen de GHCR a Artifact Registry) y reenvía /api al LoadBalancer del Gateway.
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: read
+
+concurrency:
+  group: cd-prod
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy prod (GKE)
+    # Hasta que exista el cluster (vars.GKE_CLUSTER) el job se omite en vez de fallar.
+    if: vars.GKE_CLUSTER != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: production
+
+    env:
+      NAMESPACE: prod
+      SERVICES: >-
+        customer-service account-service transaction-service payment-service
+        notification-audit-service api-gateway
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve release version
+        id: v
+        run: |
+          VERSION=$(git describe --tags --abbrev=0 --match 'v[0-9]*.[0-9]*.[0-9]*' HEAD 2>/dev/null || true)
+          if [[ -z "$VERSION" ]]; then
+            echo "::error::No hay un tag vX.Y.Z alcanzable desde main. Publica primero una rama release/X.Y.Z."
+            exit 1
+          fi
+          {
+            echo "version=$VERSION"
+            echo "prefix=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/bank-usac"
+          } >> "$GITHUB_OUTPUT"
+          echo "Desplegando $VERSION"
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check release images exist
+        env:
+          PREFIX: ${{ steps.v.outputs.prefix }}
+          VERSION: ${{ steps.v.outputs.version }}
+        run: |
+          for s in $SERVICES frontend; do
+            docker buildx imagetools inspect "$PREFIX/$s:$VERSION" >/dev/null \
+              || { echo "::error::Falta la imagen $PREFIX/$s:$VERSION"; exit 1; }
+          done
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Get GKE credentials
+        uses: google-github-actions/get-gke-credentials@v2
+        with:
+          cluster_name: ${{ vars.GKE_CLUSTER }}
+          location: ${{ vars.GKE_LOCATION }}
+
+      - name: Set image versions
+        working-directory: k8s/overlays/prod
+        env:
+          PREFIX: ${{ steps.v.outputs.prefix }}
+          VERSION: ${{ steps.v.outputs.version }}
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh | bash -s -- 5.8.1 "$RUNNER_TEMP"
+          for s in $SERVICES; do
+            "$RUNNER_TEMP/kustomize" edit set image "bank-usac/$s=$PREFIX/$s:$VERSION"
+          done
+
+      - name: Create namespace, DB secret and registry access
+        env:
+          DB_PASSWORD: ${{ secrets.PROD_DB_PASSWORD }}
+          GHCR_PULL_TOKEN: ${{ secrets.GHCR_PULL_TOKEN }}
+        run: |
+          kubectl create namespace "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
+          # Usuarios iguales a infrastructure/terraform/cloudsql.tf; una sola contraseña (var.db_password).
+          kubectl -n "$NAMESPACE" create secret generic bank-db-secret \
+            --from-literal=CUSTOMER_DB_USER=customer_user --from-literal=CUSTOMER_DB_PASSWORD="$DB_PASSWORD" \
+            --from-literal=ACCOUNT_DB_USER=account_user --from-literal=ACCOUNT_DB_PASSWORD="$DB_PASSWORD" \
+            --from-literal=TRANSACTION_DB_USER=transaction_user --from-literal=TRANSACTION_DB_PASSWORD="$DB_PASSWORD" \
+            --from-literal=PAYMENT_DB_USER=payment_user --from-literal=PAYMENT_DB_PASSWORD="$DB_PASSWORD" \
+            --from-literal=NOTIF_DB_USER=notification_user --from-literal=NOTIF_DB_PASSWORD="$DB_PASSWORD" \
+            --dry-run=client -o yaml | kubectl apply -f -
+          kubectl -n "$NAMESPACE" create secret docker-registry ghcr-pull \
+            --docker-server=ghcr.io --docker-username="${{ github.repository_owner }}" \
+            --docker-password="$GHCR_PULL_TOKEN" --dry-run=client -o yaml | kubectl apply -f -
+          kubectl -n "$NAMESPACE" patch serviceaccount default \
+            -p '{"imagePullSecrets":[{"name":"ghcr-pull"}]}'
+
+      - name: Deploy to namespace prod
+        env:
+          DB_IPS: ${{ vars.PROD_DB_PRIVATE_IPS }}
+        run: |
+          ip() { jq -er --arg k "$1" '.[$k]' <<<"$DB_IPS"; }
+          kubectl kustomize k8s/overlays/prod \
+            | sed -e "s/__CUSTOMER_DB_HOST__/$(ip customer)/" \
+                  -e "s/__ACCOUNT_DB_HOST__/$(ip account)/" \
+                  -e "s/__TRANSACTION_DB_HOST__/$(ip transaction)/" \
+                  -e "s/__PAYMENT_DB_HOST__/$(ip payment)/" \
+                  -e "s/__NOTIFICATION_DB_HOST__/$(ip notification)/" \
+            | kubectl apply -f -
+          for d in rabbitmq $SERVICES; do
+            kubectl -n "$NAMESPACE" rollout status "deployment/$d" --timeout=600s
+          done
+          kubectl -n "$NAMESPACE" get pods,hpa,svc
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      # Mismo tag vX.Y.Z que en GHCR: se copia la imagen ya probada, no se reconstruye.
+      - name: Publish frontend image to Artifact Registry
+        env:
+          PREFIX: ${{ steps.v.outputs.prefix }}
+          VERSION: ${{ steps.v.outputs.version }}
+          GAR: ${{ vars.GAR_REPOSITORY }}
+        run: |
+          [[ -n "$GAR" ]] || { echo "::error::Falta vars.GAR_REPOSITORY (terraform output -raw frontend_registry)"; exit 1; }
+          gcloud auth configure-docker "${GAR%%/*}" --quiet
+          docker pull "$PREFIX/frontend:$VERSION"
+          docker tag "$PREFIX/frontend:$VERSION" "$GAR/frontend:$VERSION"
+          docker push "$GAR/frontend:$VERSION"
+
+      # Cloud Run crea una revisión nueva y mueve el tráfico cuando está lista (sin downtime).
+      - name: Deploy frontend (Cloud Run)
+        id: frontend
+        env:
+          VERSION: ${{ steps.v.outputs.version }}
+          GAR: ${{ vars.GAR_REPOSITORY }}
+          RUN_SA: ${{ vars.FRONTEND_RUN_SA }}
+          REGION: ${{ vars.GCP_REGION || 'us-central1' }}
+        run: |
+          [[ -n "$RUN_SA" ]] || { echo "::error::Falta vars.FRONTEND_RUN_SA (terraform output -raw frontend_run_service_account)"; exit 1; }
+          for _ in $(seq 1 60); do
+            GATEWAY_IP=$(kubectl -n "$NAMESPACE" get svc api-gateway -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+            [[ -n "$GATEWAY_IP" ]] && break
+            sleep 5
+          done
+          [[ -n "$GATEWAY_IP" ]] || { echo "::error::El LoadBalancer del Gateway no tiene IP externa"; exit 1; }
+          gcloud run deploy bank-usac-frontend \
+            --image "$GAR/frontend:$VERSION" \
+            --region "$REGION" \
+            --port 3000 \
+            --service-account "$RUN_SA" \
+            --allow-unauthenticated \
+            --cpu 1 --memory 256Mi --min-instances 0 --max-instances 3 \
+            --set-env-vars "API_UPSTREAM=http://$GATEWAY_IP:8080" \
+            --quiet
+          URL=$(gcloud run services describe bank-usac-frontend --region "$REGION" --format='value(status.url)')
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
+          {
+            echo "### Producción $VERSION"
+            echo "- Frontend: $URL"
+            echo "- API Gateway: http://$GATEWAY_IP:8080"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # La SPA responde y /api llega al Gateway (401 sin token = el proxy funciona).
+      - name: Verify frontend
+        env:
+          URL: ${{ steps.frontend.outputs.url }}
+        run: |
+          curl -fsS -o /dev/null "$URL/"
+          CODE=$(curl -s -o /dev/null -w '%{http_code}' "$URL/api/accounts")
+          [[ "$CODE" == "401" ]] || { echo "::error::$URL/api/accounts respondió $CODE (se esperaba 401 del Gateway)"; exit 1; }
+          echo "Frontend OK: $URL"
+
+      - name: Diagnostics on failure
+        if: failure()
+        run: |
+          kubectl -n "$NAMESPACE" get all || true
+          kubectl -n "$NAMESPACE" describe pods || true
+          for d in $SERVICES; do
+            echo "::group::logs $d"
+            kubectl -n "$NAMESPACE" logs "deployment/$d" --tail=200 || true
+            echo "::endgroup::"
+          done

@@ -1,6 +1,6 @@
 # Proyecto-SA-B-10 — Bank USAC
 
-Monorepo académico de Software Avanzado, Fase I.
+Monorepo académico de Software Avanzado, Fase II.
 
 ## Arquitectura
 Exactamente cinco microservicios: Customer, Account, Transaction, Payment y Notification & Audit. API Gateway como único punto de entrada. RabbitMQ para comunicación asíncrona entre microservicios. Una PostgreSQL independiente por microservicio.

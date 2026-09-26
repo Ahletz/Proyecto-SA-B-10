@@ -1,0 +1,52 @@
+---
+title: C4 Nivel 3 — Account Service (Fase 2)
+config:
+  layout: elk
+  flowchart:
+    wrappingWidth: 260
+---
+flowchart TB
+    gateway["API Gateway\nalta y consulta de cuentas\n(ownership por rol)"]
+    rabbit{{"RabbitMQ\nbank.events · .retry · .dlx"}}
+    cron["Scheduler (@nestjs/schedule)\ntodos los días a medianoche"]
+
+    subgraph acc["Account Service — NestJS :3004"]
+        direction TB
+        controller["AccountController\nPOST /api/accounts\nGET /api/accounts?customerId · GET /api/accounts/:id\nPOST /api/accounts/maintenance/deactivate-inactive"]
+        consumer["AccountConsumer\ntransaction.created · payment.approved ·\npayment.rejected"]
+        service["AccountService\ntipos MONETARY / SAVINGS · saldo mínimo\n(SAVINGS 50 por defecto) · comisión opcional\nreserva monto + comisión · completa · libera\ndesactiva inactivas (6 meses, saldo &lt; Q50)"]
+        rabbitsvc["RabbitService\npub/sub + retry/DLQ,\ntermina el proceso si cae la conexión"]
+
+        accrepo["Repository&lt;AccountEntity&gt;"]
+        resrepo["Repository&lt;ReservationEntity&gt;"]
+        procrepo["Repository&lt;ProcessedEventEntity&gt;\nidempotencia por eventId"]
+    end
+
+    db[("bank_account\naccounts · transfer_reservations ·\nprocessed_events")]
+
+    gateway -->|"HTTP de borde"| controller
+    cron -->|"deactivateInactive()"| service
+    rabbit -->|"eventos consumidos"| rabbitsvc
+    rabbitsvc --> consumer
+    consumer --> service
+    controller --> service
+    service -->|"account.created · account.funds.reserved ·\naccount.funds.rejected (INSUFFICIENT_FUNDS,\nACCOUNT_NOT_FOUND_OR_INACTIVE) ·\naccount.transfer.completed ·\naccount.funds.released · account.deactivated"| rabbitsvc
+    rabbitsvc -->|"publish"| rabbit
+
+    service --> accrepo
+    service --> resrepo
+    service -->|"deduplica"| procrepo
+    accrepo -->|"TypeORM"| db
+    resrepo -->|"TypeORM"| db
+    procrepo -->|"TypeORM"| db
+
+    classDef edge fill:#1f6fc0,color:#fff,stroke:#0b4db5
+    classDef svc fill:#dbe8fb,color:#172033,stroke:#1f6fc0
+    classDef port fill:#fff,color:#172033,stroke:#1f6fc0,stroke-dasharray:4 3
+    classDef infra fill:#e5e7eb,color:#172033,stroke:#6b7280
+    classDef dbc fill:#fff7e6,color:#172033,stroke:#b54708
+    class gateway edge
+    class controller,consumer,service,rabbitsvc svc
+    class accrepo,resrepo,procrepo port
+    class rabbit,cron infra
+    class db dbc

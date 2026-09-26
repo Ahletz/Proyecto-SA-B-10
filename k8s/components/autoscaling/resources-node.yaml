@@ -1,0 +1,6 @@
+# Servicios NestJS: ~45 MiB en uso medido (docker stats tras el smoke test).
+- op: add
+  path: /spec/template/spec/containers/0/resources
+  value:
+    requests: { cpu: 100m, memory: 96Mi }
+    limits: { cpu: 500m, memory: 256Mi }
