@@ -13,11 +13,11 @@
 
 ## Registro CLIENT
 1. abrir `/register`;
-2. ingresar email, username, contraseña, nombre, documento, evidencia fotográfica, fecha de nacimiento y dirección;
-3. el sistema valida mayoría de edad y unicidad;
-4. revisar MailHog;
-5. abrir el enlace de activación;
-6. iniciar sesión.
+2. llenar nombre completo, correo, usuario, contraseña (y su confirmación), número de documento, fecha de nacimiento y dirección. La foto del documento es opcional por ahora;
+3. el **usuario** solo admite minúsculas, números, punto, guion o guion bajo (3 a 50, sin espacios); es el que se usa para iniciar sesión, no el correo;
+4. el formulario no se envía mientras falte un campo o haya un error: cada error aparece debajo de su campo (usuario con mayúsculas, contraseñas distintas, menor de 18 años, documento con formato inválido, etc.). El backend valida además que correo, usuario y documento no estén registrados;
+5. al registrarse se muestra el usuario creado y el botón **Activar ahora** (lleva a `/activate` con el token cargado). En desarrollo también llega el correo a MailHog;
+6. iniciar sesión con el usuario y la contraseña.
 
 ## Perfil
 `/profile` muestra `customerId`, rol, `identityStatus`, estado y datos de identidad. Se permiten cambios de email, nombre, dirección y evidencia fotográfica.
