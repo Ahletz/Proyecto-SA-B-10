@@ -16,7 +16,7 @@ Todo lo crea Terraform (`infrastructure/terraform`), dentro de la VPC **`bank-us
 - **Cluster GKE `bank-usac-gke`** (Standard zonal, `us-central1-a`, nodos `e2-medium` con autoscaler de 1 a 3), namespace **`prod`**. `cd-prod.yml` despliega ahí las imágenes `vX.Y.Z` en cada merge a `main`.
 - **Pods en `prod`:** API Gateway (Service `LoadBalancer`, la única entrada pública), Customer, Account, Transaction, Payment, Notification & Audit (los cinco con HPA al 80 % de CPU) y RabbitMQ.
 - **Bases de datos fuera del cluster: Cloud SQL**, una instancia PostgreSQL 17 por microservicio (`bank-usac-<servicio>-db`), con IP privada en la misma VPC. Cada servicio se conecta solo a la suya por JDBC/PostgreSQL privado; las IP salen del output `db_private_ips` de Terraform.
-- **Frontend fuera del cluster**, en Cloud Run o una VM: el navegador lo carga desde ahí y consume la API del Gateway por su IP pública (`PROD_API_BASE_URL`).
+- **Frontend fuera del cluster, en Cloud Run** (`bank-usac-frontend`, `us-central1`): nginx sirve la SPA por HTTPS y reenvía `/api` al LoadBalancer del Gateway (variable `API_UPSTREAM`), así el navegador no mezcla HTTPS con HTTP. La imagen es la misma `frontend:vX.Y.Z` de GHCR, copiada a **Artifact Registry** `bank-usac` porque Cloud Run no descarga de GHCR.
 
 ## Restricciones respetadas
 

@@ -10,13 +10,14 @@ flowchart TB
 
     subgraph cicd["CI/CD — GitHub"]
         direction LR
-        actions["GitHub Actions\nCI por integrante · cd-dev · release\n(cd-prod pendiente)"]
+        actions["GitHub Actions\nCI por integrante · cd-dev · release · cd-prod"]
         ghcr[("GHCR\nghcr.io/&lt;owner&gt;/bank-usac/*\ntags sha-&lt;commit&gt; y vX.Y.Z\nnunca latest")]
         actions -->|"build + push"| ghcr
     end
 
-    subgraph k8s["Cluster Kubernetes — namespace dev (kind) / prod (GKE, pendiente)"]
-        frontend["Frontend\nReact + TypeScript (serve :3000)\nShell por rol, transferencias, historial"]
+    frontend["Frontend\nReact + TypeScript (nginx :3000)\nShell por rol, transferencias, historial\ndev: pod del cluster · prod: Cloud Run"]
+
+    subgraph k8s["Cluster Kubernetes — namespace dev (kind) / prod (GKE)"]
         gateway["API Gateway\nNestJS :8080\nJWT, roles, ownership,\nX-Correlation-Id"]
 
         subgraph servicios["Microservicios · HPA 1–5 réplicas al 80 % CPU · rolling update"]
@@ -42,7 +43,7 @@ flowchart TB
     end
 
     usuarios -->|"HTTPS"| frontend
-    frontend -->|"REST + JWT"| gateway
+    frontend -->|"REST + JWT\n(prod: proxy /api de nginx)"| gateway
     gateway -->|"HTTP de borde"| customer
     gateway -->|"HTTP de borde"| account
     gateway -->|"historial y estado"| transaction
@@ -64,6 +65,7 @@ flowchart TB
     notification --> dbn
 
     ghcr -.->|"imágenes versionadas"| k8s
+    ghcr -.->|"frontend vX.Y.Z\n(vía Artifact Registry)"| frontend
 
     classDef person fill:#0b2347,color:#fff,stroke:#0b2347
     classDef edge fill:#1f6fc0,color:#fff,stroke:#0b4db5

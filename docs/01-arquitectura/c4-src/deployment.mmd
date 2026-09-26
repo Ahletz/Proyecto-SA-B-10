@@ -54,7 +54,8 @@ flowchart LR
                 sn[("bank-usac-notification-db<br>bank_notification")]
             end
         end
-        pfe["Frontend<br>Cloud Run / VM (fuera del cluster)"]
+        pfe["Frontend (nginx)<br>Cloud Run bank-usac-frontend<br>fuera del cluster"]
+        gar[("Artifact Registry<br>bank-usac/frontend:vX.Y.Z")]
         pgw <-->|AMQP| pmq
         psvc <-->|AMQP| pmq
         psvc -->|"JDBC privado<br>(output db_private_ips)"| csql
@@ -63,10 +64,12 @@ flowchart LR
     cliente -->|HTTP| dfe
     cliente -->|HTTP| dgw
     cliente -->|HTTPS| pfe
-    cliente -->|"HTTPS (API)"| pgw
-    pfe -.->|"PROD_API_BASE_URL"| pgw
+    pfe -->|"HTTP /api (proxy nginx)<br>API_UPSTREAM = IP del LoadBalancer"| pgw
 
     actions -->|"cd-dev.yml<br>merge a develop"| nsdev
     actions -->|"cd-prod.yml<br>merge a main"| nsprod
+    actions -->|"cd-prod.yml<br>gcloud run deploy"| pfe
+    ghcr -.->|"copia frontend:vX.Y.Z"| gar
+    gar -.->|pull| pfe
     ghcr -.->|pull| kind
     ghcr -.->|"pull (ghcr-pull)"| gke

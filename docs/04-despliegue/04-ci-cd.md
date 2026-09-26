@@ -128,7 +128,7 @@ Mientras no exista un cluster persistente, `reusable-kind-smoke.yml` crea un clu
 
 1. Crear la rama `release/X.Y.Z` desde `develop` (por ejemplo `release/2.0.0`) y hacer push.
 2. `release.yml` ejecuta, en orden:
-   1. **version:** valida que la rama se llame `release/X.Y.Z` y que el tag `vX.Y.Z` no exista. Avisa si falta la variable `PROD_API_BASE_URL`.
+   1. **version:** valida que la rama se llame `release/X.Y.Z` y que el tag `vX.Y.Z` no exista.
    2. **images:** construye y publica las 7 imágenes candidatas `:vX.Y.Z-rc.<n>` (`n` = número de ejecución del workflow).
    3. **smoke:** despliega las candidatas en kind y corre el smoke test (`reusable-kind-smoke.yml`).
    4. **promote:** copia cada candidata a `:vX.Y.Z` con `docker buildx imagetools create`. No recompila: la imagen final tiene el mismo digest que la que pasó el smoke test.
@@ -136,7 +136,7 @@ Mientras no exista un cluster persistente, `reusable-kind-smoke.yml` crea un clu
 3. Si el workflow falla antes de **promote**, `:vX.Y.Z` no existe: se corrige en la misma rama `release/X.Y.Z` y el push vuelve a ejecutarlo.
 4. Un tag publicado no se reescribe. Si hace falta un fix después, se abre `release/X.Y.(Z+1)`.
 
-La URL pública del Gateway que se compila en el frontend se toma de la variable del repositorio `PROD_API_BASE_URL` (Settings → Secrets and variables → Actions → Variables). Si no está definida, el frontend apunta a `http://localhost:8080` y el workflow lo avisa.
+El frontend de la release se compila sin URL del Gateway (`VITE_API_BASE_URL` vacío): llama a `/api` en su mismo origen y nginx lo reenvía al Gateway en producción. Así la misma imagen sirve para cualquier IP del Gateway.
 
 ## Producción
 
@@ -144,9 +144,9 @@ La URL pública del Gateway que se compila en el frontend se toma de la variable
 
 - Imágenes `ghcr.io/<owner>/bank-usac/<servicio>:vX.Y.Z`; `cd-prod.yml` fija la versión con `kustomize edit set image`.
 - Bases de datos en Cloud SQL por IP privada, puerto 5432 y los nombres de `infrastructure/terraform/cloudsql.tf`. Los hosts salen de `terraform output -json db_private_ips` y el Secret `bank-db-secret` lo crea el workflow; en git no hay credenciales.
-- El Gateway se publica con un Service `LoadBalancer`. El frontend no corre en el cluster: va en Cloud Run/VM y su URL del Gateway es la variable `PROD_API_BASE_URL` de `release.yml`.
+- El Gateway se publica con un Service `LoadBalancer`. El frontend no corre en el cluster: va en **Cloud Run** (`bank-usac-frontend`), con nginx sirviendo la SPA por HTTPS y reenviando `/api` al LoadBalancer del Gateway (`API_UPSTREAM`).
 
-`cd-prod.yml` (merge a `main`): toma el último tag `vX.Y.Z` alcanzable desde `main`, verifica que las 6 imágenes existan en GHCR, se autentica en GCP, crea el namespace, el Secret de DB y el acceso a GHCR (`ghcr-pull`), aplica el overlay y espera cada rollout. Si algo falla, imprime pods y logs.
+`cd-prod.yml` (merge a `main`): toma el último tag `vX.Y.Z` alcanzable desde `main`, verifica que las 7 imágenes existan en GHCR, se autentica en GCP, crea el namespace, el Secret de DB y el acceso a GHCR (`ghcr-pull`), aplica el overlay y espera cada rollout. Después publica el frontend: copia `frontend:vX.Y.Z` de GHCR a Artifact Registry (Cloud Run no descarga de GHCR; mismo tag, sin recompilar), lee la IP del LoadBalancer del Gateway y hace `gcloud run deploy` con `API_UPSTREAM=http://<IP>:8080`. Cloud Run crea una revisión nueva y mueve el tráfico cuando está lista. Al final comprueba que la SPA responda y que `/api/accounts` devuelva 401 (el proxy llega al Gateway), y deja las dos URL en el resumen del run. Si algo falla, imprime pods y logs.
 
 Configuración del repositorio (Settings → Secrets and variables → Actions):
 
@@ -157,6 +157,9 @@ Configuración del repositorio (Settings → Secrets and variables → Actions):
 | Secret | `GHCR_PULL_TOKEN` | Token con `read:packages` para que GKE descargue las imágenes |
 | Variable | `GKE_CLUSTER` / `GKE_LOCATION` | Nombre y zona del cluster |
 | Variable | `PROD_DB_PRIVATE_IPS` | Salida de `terraform output -json db_private_ips` |
+| Variable | `GAR_REPOSITORY` | Salida de `terraform output -raw frontend_registry` |
+| Variable | `FRONTEND_RUN_SA` | Salida de `terraform output -raw frontend_run_service_account` |
+| Variable | `GCP_REGION` | Región de Cloud Run (opcional, `us-central1` por defecto) |
 
 ## Rollback
 
@@ -164,12 +167,13 @@ Configuración del repositorio (Settings → Secrets and variables → Actions):
 - **Release fallida:** si falla antes de **promote** no se publicó ninguna versión final; las imágenes `-rc.<n>` solo son candidatas y no se despliegan en producción.
 - **Producción:** se vuelve a la versión anterior, que sigue publicada porque las imágenes `vX.Y.Z` nunca se sobrescriben.
   - Inmediato: `kubectl -n prod rollout undo deployment/<servicio>` regresa al ReplicaSet anterior con rolling update.
+  - Frontend: `gcloud run services update-traffic bank-usac-frontend --region us-central1 --to-revisions <revisión anterior>=100` (las revisiones anteriores se conservan).
   - Definitivo: volver a desplegar la versión anterior (`kustomize edit set image bank-usac/<servicio>=ghcr.io/<owner>/bank-usac/<servicio>:v<anterior>`), y corregir con una `release/X.Y.(Z+1)`.
 
 ## Pendiente (depende de la infraestructura de producción)
 
-- `terraform apply` de `infrastructure/terraform` (red, Cloud SQL y GKE; ver [Terraform](05-terraform-cloud-sql.md)) y la configuración de la tabla anterior. Hasta entonces `cd-prod.yml` se omite.
-- Despliegue del frontend en Cloud Run/VM.
+- `terraform apply` de `frontend.tf` (Artifact Registry y permisos de Cloud Run; ver [Terraform](05-terraform-cloud-sql.md)) y las variables `GAR_REPOSITORY` y `FRONTEND_RUN_SA` de la tabla anterior.
+- Primera release (`release/X.Y.Z` → tag → merge a `main`).
 
 ## Configuración del repositorio (una vez, requiere admin)
 

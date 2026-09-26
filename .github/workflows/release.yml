@@ -64,14 +64,6 @@ jobs:
             echo "prefix=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/bank-usac"
           } >> "$GITHUB_OUTPUT"
 
-      - name: Check production API URL
-        env:
-          PROD_API_BASE_URL: ${{ vars.PROD_API_BASE_URL }}
-        run: |
-          if [ -z "$PROD_API_BASE_URL" ]; then
-            echo "::warning::La variable del repositorio PROD_API_BASE_URL no está definida: el frontend de esta release apuntará a http://localhost:8080"
-          fi
-
   images:
     name: Build candidate - ${{ matrix.service }}
     needs: version
@@ -110,9 +102,10 @@ jobs:
           context: apps/${{ matrix.service }}
           push: true
           tags: ${{ needs.version.outputs.prefix }}/${{ matrix.service }}:${{ needs.version.outputs.rc }}
-          # URL pública del Gateway en producción (variable del repositorio, se define cuando exista la infraestructura).
+          # Frontend de producción: /api al mismo origen; nginx lo reenvía al Gateway
+          # (API_UPSTREAM lo fija cd-prod.yml en Cloud Run). Los demás servicios ignoran el argumento.
           build-args: |
-            VITE_API_BASE_URL=${{ vars.PROD_API_BASE_URL || 'http://localhost:8080' }}
+            VITE_API_BASE_URL=
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.version=v${{ needs.version.outputs.version }}

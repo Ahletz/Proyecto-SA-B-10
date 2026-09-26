@@ -14,6 +14,12 @@ name: CD - Deploy prod
 #   vars.GKE_CLUSTER            nombre del cluster GKE
 #   vars.GKE_LOCATION           zona del cluster (p. ej. us-central1-a)
 #   vars.PROD_DB_PRIVATE_IPS    salida de `terraform output -json db_private_ips`
+#   vars.GAR_REPOSITORY         salida de `terraform output -raw frontend_registry`
+#   vars.FRONTEND_RUN_SA        salida de `terraform output -raw frontend_run_service_account`
+#   vars.GCP_REGION             región de Cloud Run (opcional, por defecto us-central1)
+#
+# El frontend no corre en el cluster: se publica en Cloud Run con la misma versión
+# (copia de la imagen de GHCR a Artifact Registry) y reenvía /api al LoadBalancer del Gateway.
 
 on:
   push:
@@ -76,7 +82,7 @@ jobs:
           PREFIX: ${{ steps.v.outputs.prefix }}
           VERSION: ${{ steps.v.outputs.version }}
         run: |
-          for s in $SERVICES; do
+          for s in $SERVICES frontend; do
             docker buildx imagetools inspect "$PREFIX/$s:$VERSION" >/dev/null \
               || { echo "::error::Falta la imagen $PREFIX/$s:$VERSION"; exit 1; }
           done
@@ -139,6 +145,65 @@ jobs:
             kubectl -n "$NAMESPACE" rollout status "deployment/$d" --timeout=600s
           done
           kubectl -n "$NAMESPACE" get pods,hpa,svc
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      # Mismo tag vX.Y.Z que en GHCR: se copia la imagen ya probada, no se reconstruye.
+      - name: Publish frontend image to Artifact Registry
+        env:
+          PREFIX: ${{ steps.v.outputs.prefix }}
+          VERSION: ${{ steps.v.outputs.version }}
+          GAR: ${{ vars.GAR_REPOSITORY }}
+        run: |
+          [[ -n "$GAR" ]] || { echo "::error::Falta vars.GAR_REPOSITORY (terraform output -raw frontend_registry)"; exit 1; }
+          gcloud auth configure-docker "${GAR%%/*}" --quiet
+          docker pull "$PREFIX/frontend:$VERSION"
+          docker tag "$PREFIX/frontend:$VERSION" "$GAR/frontend:$VERSION"
+          docker push "$GAR/frontend:$VERSION"
+
+      # Cloud Run crea una revisión nueva y mueve el tráfico cuando está lista (sin downtime).
+      - name: Deploy frontend (Cloud Run)
+        id: frontend
+        env:
+          VERSION: ${{ steps.v.outputs.version }}
+          GAR: ${{ vars.GAR_REPOSITORY }}
+          RUN_SA: ${{ vars.FRONTEND_RUN_SA }}
+          REGION: ${{ vars.GCP_REGION || 'us-central1' }}
+        run: |
+          [[ -n "$RUN_SA" ]] || { echo "::error::Falta vars.FRONTEND_RUN_SA (terraform output -raw frontend_run_service_account)"; exit 1; }
+          for _ in $(seq 1 60); do
+            GATEWAY_IP=$(kubectl -n "$NAMESPACE" get svc api-gateway -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+            [[ -n "$GATEWAY_IP" ]] && break
+            sleep 5
+          done
+          [[ -n "$GATEWAY_IP" ]] || { echo "::error::El LoadBalancer del Gateway no tiene IP externa"; exit 1; }
+          gcloud run deploy bank-usac-frontend \
+            --image "$GAR/frontend:$VERSION" \
+            --region "$REGION" \
+            --port 3000 \
+            --service-account "$RUN_SA" \
+            --allow-unauthenticated \
+            --cpu 1 --memory 256Mi --min-instances 0 --max-instances 3 \
+            --set-env-vars "API_UPSTREAM=http://$GATEWAY_IP:8080" \
+            --quiet
+          URL=$(gcloud run services describe bank-usac-frontend --region "$REGION" --format='value(status.url)')
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
+          {
+            echo "### Producción $VERSION"
+            echo "- Frontend: $URL"
+            echo "- API Gateway: http://$GATEWAY_IP:8080"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # La SPA responde y /api llega al Gateway (401 sin token = el proxy funciona).
+      - name: Verify frontend
+        env:
+          URL: ${{ steps.frontend.outputs.url }}
+        run: |
+          curl -fsS -o /dev/null "$URL/"
+          CODE=$(curl -s -o /dev/null -w '%{http_code}' "$URL/api/accounts")
+          [[ "$CODE" == "401" ]] || { echo "::error::$URL/api/accounts respondió $CODE (se esperaba 401 del Gateway)"; exit 1; }
+          echo "Frontend OK: $URL"
 
       - name: Diagnostics on failure
         if: failure()
