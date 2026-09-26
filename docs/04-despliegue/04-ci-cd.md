@@ -80,6 +80,7 @@ k8s/
   | Frontend / MailHog | `10m` / `48Mi` · `10m` / `32Mi` | `200m` / `128Mi` · `100m` / `64Mi` |
 
   Los servicios Spring Boot llevan `JAVA_TOOL_OPTIONS=-XX:MaxRAMPercentage=70`: la JVM limita el heap a ~537 MiB y deja margen para metaspace e hilos dentro de los 768 MiB. RabbitMQ tiene 1Gi de límite porque su alarma de memoria bloquea a los publicadores al 40 % del límite. Los valores de los cinco microservicios están en `components/autoscaling` (`resources-node.yaml`, `resources-spring.yaml`); los de Gateway, RabbitMQ, MailHog y frontend, en su `deployment.yaml`.
+- **Rolling update sin cortes:** los cinco microservicios y el Gateway tienen `preStop: sleep 10 s` (`components/autoscaling/prestop-patch.yaml`). Al terminar un pod, Kubernetes lo saca del Service y le manda SIGTERM a la vez; la pausa deja que kube-proxy y el LoadBalancer dejen de enviarle tráfico antes de que cierre conexiones. Medido en kind reiniciando los 6 deployments con el Gateway consultado cada 0.2 s: sin `preStop` 4 respuestas 503 de 701; con `preStop` 1 de 724.
 - **Autoscaling:** los cinco microservicios tienen `RollingUpdate` con `maxUnavailable: 0` / `maxSurge: 1` y un HPA (`minReplicas: 1`, `maxReplicas: 5`, 80 % de CPU). Los HPA de los servicios Spring Boot (Customer, Notification & Audit) tienen `scaleUp.stabilizationWindowSeconds: 120` para no escalar por el pico de CPU del arranque. El HPA necesita `metrics-server` en el cluster; ver la [prueba de carga](06-prueba-hpa.md).
 
 Renderizar el ambiente dev localmente:
