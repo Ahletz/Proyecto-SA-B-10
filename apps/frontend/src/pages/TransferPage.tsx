@@ -1,6 +1,9 @@
 import {useCallback,useEffect,useRef,useState} from 'react';
-import {Link} from 'react-router-dom';
+import {Link,useSearchParams} from 'react-router-dom';
+import {ArrowLeftRight,History,Send} from 'lucide-react';
 import {api} from '../lib/api';
+import {accountLabel,formatMoney,KYC_LABELS} from '../lib/format';
+import {CopyId,PageHeader} from '../components/ui';
 import {
   DETAILED_STATUS_LABELS,
   TransferStatus,
@@ -29,12 +32,6 @@ type Tracking=
   |{phase:'tracking';transfer:TransferStatus}
   |{phase:'timeout';transfer:TransferStatus|null};
 
-function accountLabel(account:Account){
-  const type=account.type==='SAVINGS'?'Ahorro':'Monetaria';
-
-  return `${type} · ${account.accountId.slice(0,8)}… · Disponible Q${Number(account.availableBalance).toFixed(2)}`;
-}
-
 // Qué puede hacer el cliente según el motivo del fallo.
 function failureHelp(reason:string){
   if(reason==='KYC_NOT_VERIFIED'){
@@ -54,10 +51,14 @@ function failureHelp(reason:string){
 
 export function TransferPage(){
   const{customer}=useAuthStore();
+  const[searchParams]=useSearchParams();
 
   const[accounts,setAccounts]=useState<Account[]>([]);
-  const[sourceAccount,setSourceAccount]=useState('');
-  const[targetAccount,setTargetAccount]=useState('');
+  const[sourceAccount,setSourceAccount]=useState(searchParams.get('source')??'');
+  // Destino: una de mis cuentas (selector) o la de otra persona (se pega su ID).
+  const[targetMode,setTargetMode]=useState<'own'|'other'>('own');
+  const[ownTarget,setOwnTarget]=useState('');
+  const[otherTarget,setOtherTarget]=useState('');
   const[amount,setAmount]=useState('');
 
   const[isSending,setIsSending]=useState(false);
@@ -142,11 +143,15 @@ export function TransferPage(){
     };
   },[correlationId,loadAccounts]);
 
+  const ownTargets=accounts.filter(account=>account.accountId!==sourceAccount);
+  const selectedOwnTarget=ownTargets.some(a=>a.accountId===ownTarget)
+    ?ownTarget
+    :ownTargets[0]?.accountId??'';
   const amountValue=Number(amount);
-  const targetValue=targetAccount.trim();
+  const targetValue=targetMode==='own'?selectedOwnTarget:otherTarget.trim();
   const validationError=
     targetValue&&!UUID_PATTERN.test(targetValue)
-      ?'La cuenta destino debe ser un ID de cuenta (UUID).'
+      ?'El ID de la cuenta destino no es válido. Pídele a la otra persona que lo copie desde su página de Cuentas.'
       :targetValue&&targetValue===sourceAccount
         ?'La cuenta destino debe ser distinta de la de origen.'
         :amount!==''&&!(amountValue>0)
@@ -186,19 +191,15 @@ export function TransferPage(){
 
   return(
     <section className="page">
-      <div className="page-heading">
-        <div>
-          <h1>Transferir</h1>
-          <p className="muted">
-            La transferencia se procesa de forma asíncrona: reserva de
-            fondos, pago y acreditación.
-          </p>
-        </div>
-      </div>
+      <PageHeader
+        icon={ArrowLeftRight}
+        title="Transferir"
+        description="Envía dinero entre cuentas y sigue el estado de la operación en tiempo real."
+      />
 
       {customer&&customer.kycStatus!=='VERIFIED'&&(
         <p className="kyc-help">
-          Tu identidad no está verificada (KYC {customer.kycStatus}): la
+          Tu identidad no está verificada (KYC {KYC_LABELS[customer.kycStatus].toLowerCase()}): la
           transferencia será rechazada hasta que un administrador la verifique.
         </p>
       )}
@@ -232,42 +233,82 @@ export function TransferPage(){
             </select>
           </label>
 
-          <label>
-            Cuenta destino
-            <input
-              placeholder="ID de la cuenta destino"
-              list="own-accounts"
-              value={targetAccount}
-              onChange={e=>setTargetAccount(e.target.value)}
-            />
-            <datalist id="own-accounts">
-              {accounts
-                .filter(account=>account.accountId!==sourceAccount)
-                .map(account=>(
+          <fieldset className="segmented">
+            <legend>Cuenta destino</legend>
+            <label className={targetMode==='own'?'active':''}>
+              <input
+                type="radio"
+                name="target-mode"
+                checked={targetMode==='own'}
+                onChange={()=>setTargetMode('own')}
+              />
+              Otra de mis cuentas
+            </label>
+            <label className={targetMode==='other'?'active':''}>
+              <input
+                type="radio"
+                name="target-mode"
+                checked={targetMode==='other'}
+                onChange={()=>setTargetMode('other')}
+              />
+              Cuenta de otra persona
+            </label>
+          </fieldset>
+
+          {targetMode==='own'?(
+            <label>
+              Mi cuenta destino
+              <select
+                value={selectedOwnTarget}
+                onChange={e=>setOwnTarget(e.target.value)}
+                disabled={ownTargets.length===0}
+              >
+                {ownTargets.length===0&&(
+                  <option value="">Necesitas otra cuenta activa</option>
+                )}
+                {ownTargets.map(account=>(
                   <option key={account.accountId} value={account.accountId}>
                     {accountLabel(account)}
                   </option>
                 ))}
-            </datalist>
-          </label>
+              </select>
+            </label>
+          ):(
+            <label>
+              ID de la cuenta destino
+              <input
+                placeholder="Pega el ID que te compartió la otra persona"
+                value={otherTarget}
+                onChange={e=>setOtherTarget(e.target.value)}
+              />
+              <small className="muted">
+                La otra persona lo copia con el botón junto al ID en su página de Cuentas.
+              </small>
+            </label>
+          )}
 
           <label>
-            Monto (Q)
-            <input
-              type="number"
-              min="0.01"
-              step="0.01"
-              inputMode="decimal"
-              value={amount}
-              onChange={e=>setAmount(e.target.value)}
-            />
+            Monto
+            <span className="input-prefix">
+              <span aria-hidden="true">Q</span>
+              <input
+                type="number"
+                min="0.01"
+                step="0.01"
+                inputMode="decimal"
+                placeholder="0.00"
+                value={amount}
+                onChange={e=>setAmount(e.target.value)}
+              />
+            </span>
           </label>
 
           {validationError&&(
-            <p className="error">{validationError}</p>
+            <p className="alert alert-error">{validationError}</p>
           )}
 
           <button type="submit" disabled={!canSubmit||isTracking}>
+            <Send size={18} aria-hidden="true"/>
             {isSending?'Enviando...':'Transferir'}
           </button>
         </form>
@@ -276,7 +317,7 @@ export function TransferPage(){
           <h2>Estado</h2>
 
           {error&&(
-            <p className="error">{error}</p>
+            <p className="alert alert-error">{error}</p>
           )}
 
           {!correlationId&&!error&&(
@@ -312,15 +353,15 @@ export function TransferPage(){
                   <dl className="profile-details">
                     <div>
                       <dt>Monto</dt>
-                      <dd>Q{Number(transfer.amount).toFixed(2)}</dd>
+                      <dd>{formatMoney(transfer.amount)}</dd>
                     </div>
                     <div>
                       <dt>Destino</dt>
-                      <dd>{transfer.targetAccount}</dd>
+                      <dd><CopyId value={transfer.targetAccount}/></dd>
                     </div>
                     <div>
                       <dt>Transacción</dt>
-                      <dd><code>{transfer.transactionId}</code></dd>
+                      <dd><CopyId value={transfer.transactionId}/></dd>
                     </div>
                   </dl>
                 </>
@@ -338,10 +379,11 @@ export function TransferPage(){
               )}
 
               <p className="muted transfer-correlation">
-                correlationId: <code>{correlationId}</code>
+                Código de seguimiento: <CopyId value={correlationId}/>
               </p>
 
-              <Link to={`/transactions?accountId=${transfer?.sourceAccount??sourceAccount}`}>
+              <Link className="btn secondary" to={`/transactions?accountId=${transfer?.sourceAccount??sourceAccount}`}>
+                <History size={16} aria-hidden="true"/>
                 Ver historial de la cuenta
               </Link>
             </>

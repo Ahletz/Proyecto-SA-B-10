@@ -1,5 +1,7 @@
 import {useEffect,useMemo,useState} from 'react';
-import {Link} from 'react-router-dom';
+import {AlertCircle,AlertTriangle,Bell,Info,RefreshCw} from 'lucide-react';
+import {EmptyState,PageHeader,Pagination,paginate} from '../components/ui';
+import {formatDateTime} from '../lib/format';
 import {
   NotificationSeverity,
   useAuditStore
@@ -7,19 +9,13 @@ import {
 
 type SeverityFilter='ALL'|NotificationSeverity;
 
-function formatDate(value?:string|null){
-  if(!value){
-    return '-';
-  }
+const PAGE_SIZE=20;
 
-  const date=new Date(value);
-
-  if(Number.isNaN(date.getTime())){
-    return value;
-  }
-
-  return date.toLocaleString();
-}
+const SEVERITY_ICONS={
+  INFO:Info,
+  WARNING:AlertTriangle,
+  ERROR:AlertCircle
+};
 
 export function NotificationsPage(){
   const{
@@ -31,6 +27,7 @@ export function NotificationsPage(){
 
   const[filter,setFilter]=
     useState<SeverityFilter>('ALL');
+  const[page,setPage]=useState(1);
 
   useEffect(()=>{
     void fetchEvents();
@@ -69,28 +66,26 @@ export function NotificationsPage(){
     );
   },[events]);
 
+  const current=paginate(notifications,page,PAGE_SIZE);
+
   return(
     <section className="page">
-      <div className="page-heading">
-        <div>
-          <h1>Notificaciones</h1>
-          <p className="muted">
-            Eventos clasificados por Notification & Audit.
-          </p>
-        </div>
-
-        <div className="toolbar">
+      <PageHeader
+        icon={Bell}
+        title="Notificaciones"
+        description="Eventos del sistema clasificados por severidad."
+        actions={(
           <button
             type="button"
+            className="secondary"
             onClick={()=>void fetchEvents()}
             disabled={isLoading}
           >
+            <RefreshCw size={16} aria-hidden="true"/>
             {isLoading?'Actualizando...':'Actualizar'}
           </button>
-
-          <Link to="/">Volver</Link>
-        </div>
-      </div>
+        )}
+      />
 
       <div className="notification-summary">
         <div className="summary-card info">
@@ -109,38 +104,36 @@ export function NotificationsPage(){
         </div>
       </div>
 
-      <div className="toolbar">
+      <div className="card filter-bar">
         <label>
-          Severidad{' '}
+          Severidad
           <select
             value={filter}
-            onChange={e=>
-              setFilter(
-                e.target.value as SeverityFilter
-              )
-            }
+            onChange={e=>{
+              setFilter(e.target.value as SeverityFilter);
+              setPage(1);
+            }}
           >
             <option value="ALL">Todas</option>
-            <option value="INFO">INFO</option>
-            <option value="WARNING">WARNING</option>
-            <option value="ERROR">ERROR</option>
+            <option value="INFO">Información</option>
+            <option value="WARNING">Advertencias</option>
+            <option value="ERROR">Errores</option>
           </select>
         </label>
       </div>
 
       {error&&(
-        <p className="error">{error}</p>
+        <p className="alert alert-error">{error}</p>
       )}
 
       {!isLoading&&notifications.length===0&&(
-        <div className="card">
-          No hay notificaciones clasificadas
-          para el filtro seleccionado.
-        </div>
+        <EmptyState icon={Bell}>
+          No hay notificaciones para el filtro seleccionado.
+        </EmptyState>
       )}
 
       <div className="notification-list">
-        {notifications.map(event=>(
+        {current.items.map(event=>(
           <article
             key={event.eventId}
             className={`notification-item severity-${event.severity?.toLowerCase()}`}
@@ -149,6 +142,10 @@ export function NotificationsPage(){
               <span
                 className={`severity-badge severity-${event.severity?.toLowerCase()}`}
               >
+                {(()=>{
+                  const Icon=SEVERITY_ICONS[event.severity??'INFO'];
+                  return <Icon size={13} aria-hidden="true"/>;
+                })()}
                 {event.severity}
               </span>
 
@@ -157,7 +154,7 @@ export function NotificationsPage(){
               </span>
 
               <time>
-                {formatDate(
+                {formatDateTime(
                   event.eventTimestamp
                   ??event.processedAt
                 )}
@@ -199,6 +196,17 @@ export function NotificationsPage(){
           </article>
         ))}
       </div>
+
+      <Pagination
+        page={current.page}
+        totalPages={current.totalPages}
+        total={notifications.length}
+        noun="notificaciones"
+        onChange={p=>{
+          setPage(p);
+          window.scrollTo({top:0});
+        }}
+      />
     </section>
   );
 }

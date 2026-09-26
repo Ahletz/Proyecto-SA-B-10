@@ -1,7 +1,9 @@
 import {useEffect,useState} from 'react';
-import {Link} from 'react-router-dom';
+import {Save,User} from 'lucide-react';
 import {useAuthStore,KycStatus} from '../store/authStore';
 import {api} from '../lib/api';
+import {CUSTOMER_STATUS_LABELS,IDENTITY_LABELS,ROLE_LABELS,label} from '../lib/format';
+import {PageHeader} from '../components/ui';
 
 function kycLabel(status:KycStatus|undefined){
   switch(status){
@@ -22,6 +24,8 @@ export function ProfilePage(){
   const[fullName,setFullName]=useState('');
   const[address,setAddress]=useState('');
   const[msg,setMsg]=useState('');
+  const[error,setError]=useState('');
+  const[saving,setSaving]=useState(false);
 
   useEffect(()=>{
     if(customer){
@@ -33,29 +37,25 @@ export function ProfilePage(){
 
   return(
     <section className="page">
-      <div className="page-heading">
-        <div>
-          <h1>Perfil</h1>
-          <p className="muted">
-            Información personal y estado de verificación.
-          </p>
-        </div>
-
-        <Link to="/">Volver</Link>
-      </div>
+      <PageHeader
+        icon={User}
+        title="Perfil"
+        description="Información personal y estado de verificación."
+      />
 
       <div className="profile-grid">
         <div className="card form">
           <label>
-            Email
+            Correo electrónico
             <input
+              type="email"
               value={email}
               onChange={e=>setEmail(e.target.value)}
             />
           </label>
 
           <label>
-            Nombre
+            Nombre completo
             <input
               value={fullName}
               onChange={e=>setFullName(e.target.value)}
@@ -71,31 +71,44 @@ export function ProfilePage(){
           </label>
 
           <button
+            disabled={saving}
             onClick={async()=>{
-              await api('/api/customers/me',{
-                method:'PUT',
-                body:JSON.stringify({
-                  email,
-                  fullName,
-                  address
-                })
-              });
+              setSaving(true);
+              setMsg('');
+              setError('');
 
-              await loadMe();
-              setMsg('Perfil actualizado');
+              try{
+                await api('/api/customers/me',{
+                  method:'PUT',
+                  body:JSON.stringify({
+                    email,
+                    fullName,
+                    address
+                  })
+                });
+
+                await loadMe();
+                setMsg('Perfil actualizado.');
+              }catch(e){
+                setError(e instanceof Error?e.message:String(e));
+              }finally{
+                setSaving(false);
+              }
             }}
           >
-            Guardar
+            <Save size={18} aria-hidden="true"/>
+            {saving?'Guardando...':'Guardar cambios'}
           </button>
 
-          {msg&&<p className="notice">{msg}</p>}
+          {msg&&<p className="alert alert-success">{msg}</p>}
+          {error&&<p className="alert alert-error">{error}</p>}
         </div>
 
         <aside className="card">
           <h2>Verificación KYC</h2>
 
           <p className="muted">
-            Estado de validación de identidad del cliente.
+            Solo los clientes verificados pueden transferir.
           </p>
 
           <div
@@ -118,20 +131,25 @@ export function ProfilePage(){
             </div>
 
             <div>
-              <dt>Estado de cuenta</dt>
-              <dd>{customer?.status??'-'}</dd>
+              <dt>Rol</dt>
+              <dd>{label(ROLE_LABELS,customer?.role)}</dd>
+            </div>
+
+            <div>
+              <dt>Estado de la cuenta de usuario</dt>
+              <dd>{label(CUSTOMER_STATUS_LABELS,customer?.status)}</dd>
             </div>
 
             <div>
               <dt>Identidad</dt>
-              <dd>{customer?.identityStatus??'-'}</dd>
+              <dd>{label(IDENTITY_LABELS,customer?.identityStatus)}</dd>
             </div>
           </dl>
 
           {customer?.kycStatus!=='VERIFIED'&&(
             <p className="kyc-help">
-              Las transacciones requieren que el estado
-              KYC sea VERIFIED.
+              Un administrador debe verificar tu identidad antes de
+              que puedas transferir.
             </p>
           )}
         </aside>
