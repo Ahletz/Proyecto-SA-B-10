@@ -68,6 +68,19 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Set up Docker Buildx
+        if: inputs.docker && github.event_name == 'push'
+        uses: docker/setup-buildx-action@v3
+
+      # Caché de capas en GitHub Actions: lee también la que deja cd-dev.yml para el mismo servicio.
       - name: Docker sanity check
         if: inputs.docker && github.event_name == 'push'
-        run: docker build -t bank-usac/${{ inputs.service }}:ci .
+        uses: docker/build-push-action@v6
+        with:
+          context: apps/${{ inputs.service }}
+          push: false
+          tags: bank-usac/${{ inputs.service }}:ci
+          cache-from: |
+            type=gha,scope=ci-${{ inputs.service }}
+            type=gha,scope=${{ inputs.service }}
+          cache-to: type=gha,mode=max,scope=ci-${{ inputs.service }}

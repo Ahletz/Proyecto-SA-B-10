@@ -46,6 +46,12 @@ En `integrante1-ci.yml`, el job de Frontend corre `type-check`, `lint` (ESLint c
 
 `integrante2-ci.yml` cubre Account y Payment con el mismo workflow reutilizable (NestJS). `integrante3-ci.yml` cubre Transaction Service, API Gateway y los manifiestos de `k8s/`. Los overlays `dev` y `prod` se renderizan con Kustomize, se validan con kubeconform y se rechaza cualquier imagen `:latest`.
 
+**Optimización del pipeline:**
+- Caché de dependencias: `actions/setup-node` (`cache: npm`, por `package-lock.json`) y `actions/setup-java` (`cache: maven`, por `pom.xml`).
+- Caché de capas Docker `type=gha` con Buildx en todos los builds: el chequeo de imagen del CI (scope `ci-<servicio>`, que también lee la caché de `cd-dev`), `cd-dev.yml` y `release.yml`.
+- Jobs en paralelo: cada servicio es un job independiente dentro de su workflow, y los tres workflows de integrante corren a la vez; `cd-dev.yml` y `release.yml` construyen con una matriz por servicio.
+- Build selectivo: solo corren los jobs de los servicios que cambiaron (ver [Build selectivo](#build-selectivo-monorepo)).
+
 ## Manifiestos Kubernetes (Kustomize)
 
 ```
