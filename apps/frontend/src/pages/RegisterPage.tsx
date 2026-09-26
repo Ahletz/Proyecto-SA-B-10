@@ -1,5 +1,7 @@
 import {FormEvent,useState} from 'react';
 import {Link} from 'react-router-dom';
+import {CheckCircle2,LogIn,MailCheck,UserPlus} from 'lucide-react';
+import {AuthLayout} from '../components/AuthLayout';
 import {api} from '../lib/api';
 import {
   EMPTY_REGISTRATION,
@@ -82,36 +84,37 @@ export function RegisterPage(){
 
   if(registered){
     return(
-      <main className="center">
-        <div className="card form wide">
-          <h1>Registro completado</h1>
+      <AuthLayout title="Registro completado">
+        <div className="result-block">
+          <CheckCircle2 size={44} className="result-icon success" aria-hidden="true"/>
           <p>
             Tu usuario es <strong>{registered.username}</strong>. Antes de iniciar sesión
             debes activar la cuenta.
           </p>
-          <Link
-            className="button-link"
-            to={`/activate?token=${encodeURIComponent(registered.activationToken)}`}
-          >
-            Activar ahora
-          </Link>
-          <p className="muted">
-            También puedes usar el enlace del correo de activación.
-          </p>
-          <Link to="/login">Ir a iniciar sesión</Link>
         </div>
-      </main>
+        <Link
+          className="btn"
+          to={`/activate?token=${encodeURIComponent(registered.activationToken)}`}
+        >
+          <MailCheck size={18} aria-hidden="true"/>
+          Activar ahora
+        </Link>
+        <p className="muted">
+          También puedes usar el enlace del correo de activación.
+        </p>
+      </AuthLayout>
     );
   }
 
   return(
-    <main className="center">
-      <form className="card form wide" onSubmit={submit} noValidate>
-        <h1>Registro Bank USAC</h1>
-        <p className="muted">Todos los campos son obligatorios salvo los marcados como opcionales.</p>
-
+    <AuthLayout
+      title="Crear cuenta"
+      subtitle="Todos los campos son obligatorios salvo los marcados como opcionales."
+      wide
+    >
+      <form className="form register-grid" onSubmit={submit} noValidate>
         {FIELDS.map(field=>(
-          <label key={field.key}>
+          <label key={field.key} className={field.key==='address'?'span-2':undefined}>
             <span>
               {field.label}
               {field.optional&&<small className="muted"> (opcional)</small>}
@@ -134,13 +137,21 @@ export function RegisterPage(){
           </label>
         ))}
 
-        {serverError&&<p className="error">{serverError}</p>}
+        {serverError&&<p className="alert alert-error span-2">{serverError}</p>}
 
-        <button disabled={sending}>
+        <button className="span-2" disabled={sending}>
+          <UserPlus size={18} aria-hidden="true"/>
           {sending?'Registrando...':'Registrar'}
         </button>
-        <Link to="/login">Volver a iniciar sesión</Link>
       </form>
-    </main>
+
+      <div className="auth-footer">
+        <span className="muted">¿Ya tienes cuenta?</span>
+        <Link to="/login" className="btn secondary">
+          <LogIn size={18} aria-hidden="true"/>
+          Iniciar sesión
+        </Link>
+      </div>
+    </AuthLayout>
   );
 }

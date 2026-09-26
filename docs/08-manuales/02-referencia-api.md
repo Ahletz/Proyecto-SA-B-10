@@ -20,7 +20,7 @@ Toda respuesta del Gateway trae el header `X-Correlation-Id` (expuesto por CORS 
 | GET | `/api/customers/activate/:token` | público | activar cliente |
 | GET | `/api/customers/me` | autenticado | consultar perfil |
 | PUT | `/api/customers/me` | autenticado | actualizar perfil |
-| GET | `/api/customers?kycStatus=PENDING` | ADMIN | listar clientes (filtro opcional `PENDING`, `VERIFIED` o `REJECTED`; sin la foto del documento) |
+| GET | `/api/customers?kycStatus=PENDING` | ADMIN, CASHIER | listar clientes (ADMIN revisa KYC; CASHIER elige cliente en Cuentas e Historial) (filtro opcional `PENDING`, `VERIFIED` o `REJECTED`; sin la foto del documento) |
 | PATCH | `/api/customers/:customerId/kyc` | ADMIN | cambiar estado KYC y publicar `customer.kyc.status.changed` |
 
 Request KYC (`PENDING`, `VERIFIED` o `REJECTED`; repetir el estado actual no publica otro evento):
