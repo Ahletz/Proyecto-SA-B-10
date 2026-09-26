@@ -1,6 +1,7 @@
 import {Link} from 'react-router-dom';
 import {ArrowLeftRight,Bell,History,Landmark,ShieldCheck,Wallet} from 'lucide-react';
 import {AppLayout,navItemsFor} from '../components/AppLayout';
+import {KYC_LABELS} from '../lib/format';
 import {ProtectedRoute} from '../components/ProtectedRoute';
 import {useAuthStore} from '../store/authStore';
 
@@ -10,6 +11,7 @@ const DESCRIPTIONS:Record<string,string>={
   '/transfer':'Envía dinero y sigue el estado de la transferencia.',
   '/transactions':'Transferencias enviadas y recibidas por cuenta.',
   '/payments':'Pagos procesados y su resultado.',
+  '/customers':'Revisa y verifica la identidad (KYC) de los clientes.',
   '/notifications':'Notificaciones clasificadas por severidad.',
   '/audit':'Registro de auditoría de los eventos del sistema.'
 };
@@ -136,17 +138,18 @@ function Dashboard(){
 
       {customer.role==='CLIENT'&&customer.kycStatus!=='VERIFIED'&&(
         <p className="kyc-help">
-          Tu identidad todavía no está verificada (KYC {customer.kycStatus}).
+          Tu identidad todavía no está verificada (KYC {KYC_LABELS[customer.kycStatus].toLowerCase()}).
           Las transferencias serán rechazadas hasta que un administrador
           la verifique. Revisa el estado en <Link to="/profile">Perfil</Link>.
         </p>
       )}
 
       <div className="shortcut-grid">
-        {shortcuts.map(item=>(
-          <Link key={item.to} to={item.to} className="card shortcut">
-            <strong>{item.label}</strong>
-            <span className="muted">{DESCRIPTIONS[item.to]}</span>
+        {shortcuts.map(({to,label,icon:Icon})=>(
+          <Link key={to} to={to} className="card shortcut">
+            <span className="page-icon"><Icon size={20} aria-hidden="true"/></span>
+            <strong>{label}</strong>
+            <span className="muted">{DESCRIPTIONS[to]}</span>
           </Link>
         ))}
       </div>

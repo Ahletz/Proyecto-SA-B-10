@@ -105,7 +105,7 @@ public class CustomerService {
     }
 
     /*
-     * Listado para que un ADMIN revise el KYC. Omite la foto del documento,
+     * Listado para ADMIN (revisión KYC) y CASHIER (elegir cliente en Cuentas e Historial). Omite la foto del documento,
      * que puede ser pesada y no hace falta en la tabla.
      */
     @Transactional(readOnly = true)

@@ -19,7 +19,7 @@ public class WebSecurityConfig {
             .authorizeHttpRequests(a -> a
                 .requestMatchers("/api/customers/register","/api/customers/login","/api/customers/activate/**","/actuator/**").permitAll()
                 .requestMatchers(HttpMethod.PATCH, "/api/customers/*/kyc").hasRole("ADMIN")
-                .requestMatchers(HttpMethod.GET, "/api/customers").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.GET, "/api/customers").hasAnyRole("ADMIN", "CASHIER")
                 .anyRequest().authenticated());
         http.addFilterBefore(new JwtAuthenticationFilter(), UsernamePasswordAuthenticationFilter.class);
         return http.build();

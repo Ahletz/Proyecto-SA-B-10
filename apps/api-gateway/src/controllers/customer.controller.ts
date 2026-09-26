@@ -5,5 +5,5 @@ import {Body,Controller,Get,Headers,Param,Patch,Post,Put,Query} from '@nestjs/co
  @Public() @Get('activate/:token') activate(@Param('token')t:string){return proxyJson(this.base(),`/api/customers/activate/${t}`,'GET');}
  @Get('me') me(@Headers('authorization')a:string){return proxyJson(this.base(),'/api/customers/me','GET',undefined,{Authorization:a});}
  @Put('me') update(@Body()b:any,@Headers('authorization')a:string){return proxyJson(this.base(),'/api/customers/me','PUT',b,{Authorization:a});}
- @Roles('ADMIN') @Get() list(@Query('kycStatus')k:string|undefined,@Headers('authorization')a:string){const q=k?`?kycStatus=${encodeURIComponent(k)}`:'';return proxyJson(this.base(),`/api/customers${q}`,'GET',undefined,{Authorization:a});}
+ @Roles('ADMIN','CASHIER') @Get() list(@Query('kycStatus')k:string|undefined,@Headers('authorization')a:string){const q=k?`?kycStatus=${encodeURIComponent(k)}`:'';return proxyJson(this.base(),`/api/customers${q}`,'GET',undefined,{Authorization:a});}
  @Roles('ADMIN') @Patch(':customerId/kyc') kyc(@Param('customerId')id:string,@Body()b:{status:string},@Headers('authorization')a:string){return proxyJson(this.base(),`/api/customers/${encodeURIComponent(id)}/kyc`,'PATCH',{status:b?.status},{Authorization:a});}}

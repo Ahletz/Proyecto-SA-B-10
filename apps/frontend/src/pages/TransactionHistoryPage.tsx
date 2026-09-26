@@ -1,6 +1,19 @@
 import {useCallback,useEffect,useState} from 'react';
 import {useSearchParams} from 'react-router-dom';
+import {History,Inbox,Search} from 'lucide-react';
 import {api} from '../lib/api';
+import {formatDateTime,formatMoney} from '../lib/format';
+import {
+  AccountSelect,
+  Badge,
+  CopyId,
+  CustomerSelect,
+  EmptyState,
+  PageHeader,
+  Pagination,
+  TableWrap,
+  useClientCustomers
+} from '../components/ui';
 import {
   TransactionHistoryItem,
   TransactionHistoryPage as HistoryPage,
@@ -23,22 +36,16 @@ interface Account{
   type:string;
 }
 
-function formatDate(value:string){
-  const date=new Date(value);
-
-  return Number.isNaN(date.getTime())
-    ?value
-    :date.toLocaleString();
-}
+const STATUS_TONES:Record<TransactionStatus,'warning'|'success'|'danger'>={
+  PENDING:'warning',
+  APPROVED:'success',
+  FAILED:'danger'
+};
 
 function formatAmount(item:TransactionHistoryItem){
   const sign=item.direction==='OUTGOING'?'-':'+';
 
-  return `${sign}Q${item.amount.toFixed(2)}`;
-}
-
-function shortId(id:string){
-  return id.length>13?`${id.slice(0,8)}…${id.slice(-4)}`:id;
+  return `${sign}${formatMoney(item.amount)}`;
 }
 
 export function TransactionHistoryPage(){
@@ -50,6 +57,10 @@ export function TransactionHistoryPage(){
   const[accounts,setAccounts]=useState<Account[]>([]);
   const[accountId,setAccountId]=
     useState(searchParams.get('accountId')??'');
+  // ADMIN y CASHIER eligen primero el cliente y luego una de sus cuentas.
+  const[customerId,setCustomerId]=
+    useState(searchParams.get('customerId')??'');
+  const{customers}=useClientCustomers(!isClient);
   const[from,setFrom]=useState('');
   const[to,setTo]=useState('');
   const[status,setStatus]=useState<TransactionStatus|''>('');
@@ -60,26 +71,26 @@ export function TransactionHistoryPage(){
   const[error,setError]=useState<string|null>(null);
 
   /*
-   * El cliente elige entre sus propias cuentas. ADMIN y CASHIER
-   * escriben el accountId (o llegan desde la página de cuentas).
+   * El cliente elige entre sus propias cuentas; ADMIN y CASHIER entre las
+   * del cliente seleccionado (o llegan desde Cuentas con ?accountId=&customerId=).
    */
   useEffect(()=>{
-    if(!isClient){
+    if(!isClient&&!customerId){
+      setAccounts([]);
       return;
     }
 
-    api('/api/accounts')
+    const query=isClient?'':`?customerId=${encodeURIComponent(customerId)}`;
+
+    api(`/api/accounts${query}`)
       .then((list:Account[])=>{
         setAccounts(list);
-
-        if(!accountId&&list.length>0){
-          setAccountId(list[0].accountId);
-        }
+        setAccountId(current=>
+          list.some(a=>a.accountId===current)?current:list[0]?.accountId??''
+        );
       })
       .catch(e=>setError(e instanceof Error?e.message:String(e)));
-  // Solo al cambiar de rol: accountId se lee para no pisar el que vino por ?accountId=.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  },[isClient]);
+  },[isClient,customerId]);
 
   const load=useCallback(async(targetPage:number)=>{
     if(!accountId){
@@ -102,29 +113,21 @@ export function TransactionHistoryPage(){
 
       setResult(data);
       setPage(targetPage);
-      setSearchParams({accountId},{replace:true});
+      setSearchParams(isClient?{accountId}:{accountId,customerId},{replace:true});
     }catch(e){
       setResult(null);
       setError(e instanceof Error?e.message:String(e));
     }finally{
       setIsLoading(false);
     }
-  },[accountId,from,to,status,setSearchParams]);
+  },[accountId,customerId,isClient,from,to,status,setSearchParams]);
 
-  /*
-   * Carga automática al elegir una cuenta del selector (CLIENT) o al
-   * llegar con ?accountId= desde Cuentas. Cuando el ID se escribe a
-   * mano se espera al botón Buscar para no consultar en cada tecla.
-   */
-  const initialAccountId=searchParams.get('accountId');
-
+  // Carga al elegir una cuenta; los filtros de fecha y estado se aplican con Buscar.
   useEffect(()=>{
-    if(isClient||(accountId&&accountId===initialAccountId&&!result)){
-      void load(1);
-    }
-  // A propósito sin load/result: los filtros se aplican con Buscar, no en cada cambio.
+    void load(1);
+  // A propósito sin load: los filtros se aplican con Buscar, no en cada cambio.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  },[accountId,isClient]);
+  },[accountId]);
 
   const totalPages=result
     ?Math.max(1,Math.ceil(result.total/result.size))
@@ -132,14 +135,11 @@ export function TransactionHistoryPage(){
 
   return(
     <section className="page">
-      <div className="page-heading">
-        <div>
-          <h1>Historial de transacciones</h1>
-          <p className="muted">
-            Transferencias enviadas y recibidas por cuenta.
-          </p>
-        </div>
-      </div>
+      <PageHeader
+        icon={History}
+        title="Historial de transacciones"
+        description="Transferencias enviadas y recibidas por cuenta."
+      />
 
       <form
         className="card history-filters"
@@ -148,32 +148,25 @@ export function TransactionHistoryPage(){
           void load(1);
         }}
       >
+        {!isClient&&(
+          <label>
+            Cliente
+            <CustomerSelect
+              customers={customers}
+              value={customerId}
+              onChange={setCustomerId}
+            />
+          </label>
+        )}
+
         <label>
           Cuenta
-          {isClient?(
-            <select
-              value={accountId}
-              onChange={e=>setAccountId(e.target.value)}
-            >
-              {accounts.length===0&&(
-                <option value="">Sin cuentas</option>
-              )}
-              {accounts.map(account=>(
-                <option
-                  key={account.accountId}
-                  value={account.accountId}
-                >
-                  {account.type} · {shortId(account.accountId)}
-                </option>
-              ))}
-            </select>
-          ):(
-            <input
-              placeholder="accountId"
-              value={accountId}
-              onChange={e=>setAccountId(e.target.value.trim())}
-            />
-          )}
+          <AccountSelect
+            accounts={accounts}
+            value={accountId}
+            onChange={setAccountId}
+            emptyLabel={isClient||customerId?'Sin cuentas':'Elige un cliente primero'}
+          />
         </label>
 
         <label>
@@ -215,35 +208,37 @@ export function TransactionHistoryPage(){
           type="submit"
           disabled={isLoading||!accountId}
         >
+          <Search size={16} aria-hidden="true"/>
           {isLoading?'Buscando...':'Buscar'}
         </button>
       </form>
 
       {error&&(
-        <p className="error">{error}</p>
+        <p className="alert alert-error">{error}</p>
       )}
 
       {!accountId&&!error&&(
-        <div className="card">
-          Selecciona una cuenta para ver su historial.
-        </div>
+        <EmptyState icon={History}>
+          {isClient?'Todavía no tienes cuentas.':'Elige un cliente y una de sus cuentas para ver su historial.'}
+        </EmptyState>
       )}
 
       {result&&result.items.length===0&&(
-        <div className="card">
+        <EmptyState icon={Inbox}>
           No hay transacciones para los filtros seleccionados.
-        </div>
+        </EmptyState>
       )}
 
       {result&&result.items.length>0&&(
         <>
+          <TableWrap>
           <table className="history-table">
             <thead>
               <tr>
                 <th>Fecha</th>
                 <th>Tipo</th>
                 <th>Contraparte</th>
-                <th>Monto</th>
+                <th className="num">Monto</th>
                 <th>Estado</th>
                 <th>Transacción</th>
               </tr>
@@ -251,32 +246,27 @@ export function TransactionHistoryPage(){
             <tbody>
               {result.items.map(item=>(
                 <tr key={item.transactionId}>
-                  <td>{formatDate(item.createdAt)}</td>
+                  <td>{formatDateTime(item.createdAt)}</td>
                   <td>
                     {item.direction==='OUTGOING'
                       ?'Enviada'
                       :'Recibida'}
                   </td>
-                  <td title={
-                    item.direction==='OUTGOING'
-                      ?item.targetAccount
-                      :item.sourceAccount
-                  }>
-                    {shortId(
+                  <td>
+                    <CopyId value={
                       item.direction==='OUTGOING'
                         ?item.targetAccount
                         :item.sourceAccount
-                    )}
+                    }/>
                   </td>
-                  <td className={`amount amount-${item.direction.toLowerCase()}`}>
+                  <td className={`num amount amount-${item.direction.toLowerCase()}`}>
                     {formatAmount(item)}
                   </td>
                   <td>
-                    <span
-                      className={`tx-status tx-status-${item.status.toLowerCase()}`}
-                      title={`Estado interno: ${item.detailedStatus}`}
-                    >
-                      {STATUS_LABELS[item.status]}
+                    <span title={`Estado interno: ${item.detailedStatus}`}>
+                      <Badge tone={STATUS_TONES[item.status]}>
+                        {STATUS_LABELS[item.status]}
+                      </Badge>
                     </span>
                     {item.failureReason&&(
                       <div className="muted tx-reason" title={item.failureReason}>
@@ -284,35 +274,23 @@ export function TransactionHistoryPage(){
                       </div>
                     )}
                   </td>
-                  <td title={`correlationId: ${item.correlationId}`}>
-                    <code>{shortId(item.transactionId)}</code>
+                  <td>
+                    <CopyId value={item.transactionId}/>
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
+          </TableWrap>
 
-          <div className="pagination">
-            <button
-              type="button"
-              disabled={isLoading||page<=1}
-              onClick={()=>void load(page-1)}
-            >
-              Anterior
-            </button>
-
-            <span className="muted">
-              Página {page} de {totalPages} · {result.total} transacciones
-            </span>
-
-            <button
-              type="button"
-              disabled={isLoading||page>=totalPages}
-              onClick={()=>void load(page+1)}
-            >
-              Siguiente
-            </button>
-          </div>
+          <Pagination
+            page={page}
+            totalPages={totalPages}
+            total={result.total}
+            noun="transacciones"
+            disabled={isLoading}
+            onChange={p=>void load(p)}
+          />
         </>
       )}
     </section>
