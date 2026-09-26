@@ -16,6 +16,7 @@ import{TransactionHistoryPage}from'./pages/TransactionHistoryPage';
 import{AuditPage}from'./pages/AuditPage';
 import{PaymentsPage}from'./pages/PaymentsPage';
 import{NotificationsPage}from'./pages/NotificationsPage';
+import{CustomersPage}from'./pages/CustomersPage';
 import{ProtectedRoute}from'./components/ProtectedRoute';
 import{AppLayout}from'./components/AppLayout';
 
@@ -85,6 +86,15 @@ export const App=()=>(
           element={
             <ProtectedRoute roles={['ADMIN']}>
               <AuditPage/>
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/customers"
+          element={
+            <ProtectedRoute roles={['ADMIN']}>
+              <CustomersPage/>
             </ProtectedRoute>
           }
         />

@@ -42,6 +42,11 @@
   color:#b42318;
 }
 
+.customer-table .kyc-status{
+  margin:0;
+  padding:4px 10px;
+}
+
 .kyc-help{
   margin-top:18px;
   padding:12px;

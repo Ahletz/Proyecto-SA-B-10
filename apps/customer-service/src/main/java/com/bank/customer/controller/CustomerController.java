@@ -33,6 +33,11 @@ public class CustomerController {
         return ResponseEntity.ok(service.updateCustomer(auth.getName(), req, correlationId));
     }
 
+    @GetMapping
+    public ResponseEntity<?> list(@RequestParam(value="kycStatus", required=false) String kycStatus) {
+        return ResponseEntity.ok(service.listCustomers(kycStatus));
+    }
+
     @PatchMapping("/{customerId}/kyc")
     public ResponseEntity<?> updateKycStatus(
         @PathVariable String customerId,

@@ -7,6 +7,7 @@ import com.bank.customer.model.KycStatus;
 import com.bank.customer.publisher.EventPublisher;
 import com.bank.customer.repository.CustomerRepository;
 import com.bank.customer.util.JwtUtil;
+import org.springframework.data.domain.Sort;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -103,6 +104,22 @@ public class CustomerService {
         return toResponse(c);
     }
 
+    /*
+     * Listado para que un ADMIN revise el KYC. Omite la foto del documento,
+     * que puede ser pesada y no hace falta en la tabla.
+     */
+    @Transactional(readOnly = true)
+    public List<Map<String,Object>> listCustomers(String kycStatus) {
+        List<Customer> customers = kycStatus == null || kycStatus.isBlank()
+            ? repo.findAll(Sort.by("id"))
+            : repo.findByKycStatusOrderByIdAsc(parseKycStatus(kycStatus));
+        return customers.stream().map(c -> {
+            Map<String,Object> r = toResponse(c);
+            r.remove("documentPhoto");
+            return r;
+        }).toList();
+    }
+
     @Transactional
     public Map<String,Object> updateKycStatus(
             String customerId,
@@ -111,17 +128,7 @@ public class CustomerService {
 
         Customer customer = findByExternalCustomerId(customerId);
 
-        KycStatus newStatus;
-
-        try {
-            newStatus = KycStatus.valueOf(
-                req.status().trim().toUpperCase(Locale.ROOT)
-            );
-        } catch (IllegalArgumentException ex) {
-            throw new ValidationException(
-                "Estado KYC inválido. Valores permitidos: PENDING, VERIFIED, REJECTED"
-            );
-        }
+        KycStatus newStatus = parseKycStatus(req.status());
 
         KycStatus previousStatus = customer.getKycStatus();
 
@@ -157,6 +164,16 @@ public class CustomerService {
         );
 
         return toResponse(customer);
+    }
+
+    private KycStatus parseKycStatus(String status) {
+        try {
+            return KycStatus.valueOf(status.trim().toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException | NullPointerException ex) {
+            throw new ValidationException(
+                "Estado KYC inválido. Valores permitidos: PENDING, VERIFIED, REJECTED"
+            );
+        }
     }
 
     private Customer findByExternalCustomerId(String customerId) {
