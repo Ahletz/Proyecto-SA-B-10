@@ -1,0 +1,8 @@
+# Rolling update sin cortes: al terminar un pod, Kubernetes lo saca del Service y le
+# manda SIGTERM a la vez. La pausa deja que kube-proxy y el LoadBalancer dejen de
+# enviarle tráfico antes de que el proceso empiece a cerrar conexiones.
+- op: add
+  path: /spec/template/spec/containers/0/lifecycle
+  value:
+    preStop:
+      sleep: { seconds: 10 }
