@@ -9,7 +9,7 @@
 6. Login/JWT y perfil `VALIDATED/ACTIVE`.
 7. Crear `MONETARY Q1500` y `SAVINGS Q100`.
 8. Intentar transferir antes de verificar el KYC: la transferencia termina `FAILED` con motivo "Cliente sin verificación KYC".
-9. ADMIN verifica el KYC del cliente (`PATCH /api/customers/:customerId/kyc` con `{"status":"VERIFIED"}`).
+9. ADMIN verifica el KYC del cliente en **Clientes** → **Verificar** (equivale a `PATCH /api/customers/:customerId/kyc` con `{"status":"VERIFIED"}`).
 10. Transferir Q250 desde **Transferir**: el estado avanza solo hasta **Completada** y los saldos quedan Q1250/Q350.
 11. Abrir **Historial** de la cuenta origen y filtrar por estado.
 12. Login ADMIN y mostrar auditoría con el mismo `correlationId` en todos los eventos.

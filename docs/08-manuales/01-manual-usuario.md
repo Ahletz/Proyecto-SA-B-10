@@ -26,10 +26,10 @@
 En `/accounts` crear `MONETARY` o `SAVINGS`, indicar saldo inicial y consultar saldo/disponible/estado.
 
 ## Navegación
-Después de iniciar sesión, la barra superior muestra solo las opciones del rol: CLIENT ve Inicio, Perfil, Cuentas, Transferir e Historial; CASHIER agrega Pagos; ADMIN agrega Pagos, Notificaciones y Auditoría (no transfiere).
+Después de iniciar sesión, la barra superior muestra solo las opciones del rol: CLIENT ve Inicio, Perfil, Cuentas, Transferir e Historial; CASHIER agrega Pagos; ADMIN agrega Pagos, Clientes, Notificaciones y Auditoría (no transfiere).
 
 ## Transferencia CLIENT
-Requisito: el KYC del cliente debe estar `VERIFIED`. Mientras no lo esté, Inicio y Transferir muestran un aviso y la transferencia se rechaza con `KYC_NOT_VERIFIED`. Un ADMIN lo verifica con `PATCH /api/customers/:customerId/kyc` (ver [referencia API](02-referencia-api.md)).
+Requisito: el KYC del cliente debe estar `VERIFIED`. Mientras no lo esté, Inicio y Transferir muestran un aviso y la transferencia se rechaza con `KYC_NOT_VERIFIED`. Un ADMIN lo verifica en **Clientes** (ver [ADMIN](#admin)).
 
 1. abrir **Transferir** (`/transfer`);
 2. elegir la cuenta origen de la lista (muestra el saldo disponible);
@@ -48,5 +48,7 @@ Usuario demo: `cashier`. La contraseña se suministra por configuración de ambi
 
 ## ADMIN
 Usuario demo: `admin`. Puede consultar auditoría, pagos y mantenimiento.
+
+En **Clientes** (`/customers`) revisa el KYC: la lista abre filtrada en *Pendiente* y cada fila tiene **Verificar** y **Rechazar**. El cambio publica `customer.kyc.status.changed`; en unos segundos Transaction actualiza su proyección y el cliente verificado ya puede transferir.
 
 Las credenciales de demostración no deben tratarse como credenciales de producción.

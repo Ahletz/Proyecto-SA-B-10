@@ -18,6 +18,7 @@ export const NAV_ITEMS:NavItem[]=[
   {to:'/transfer',label:'Transferir',roles:['CLIENT']},
   {to:'/transactions',label:'Historial'},
   {to:'/payments',label:'Pagos',roles:['ADMIN','CASHIER']},
+  {to:'/customers',label:'Clientes',roles:['ADMIN']},
   {to:'/notifications',label:'Notificaciones',roles:['ADMIN']},
   {to:'/audit',label:'Auditoría',roles:['ADMIN']}
 ];
