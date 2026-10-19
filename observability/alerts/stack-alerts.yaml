@@ -1,0 +1,11 @@
+groups:
+  - name: observability-stack
+    rules:
+      - alert: OtelCollectorDown
+        expr: up{job="otel-collector"} == 0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "El OTel Collector no responde; se pierden trazas, métricas y logs de las aplicaciones"
+          runbook: "observability/runbooks/otel-collector-down.md"
