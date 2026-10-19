@@ -43,7 +43,7 @@ Orden:
 4. **Prueba conjunta** (Ale + Ángel, en la ventana acordada): depósito saliente, depósito entrante, timeout, reversa y conciliación. Ver `diseno-interbancario.md` para los estados esperados.
 5. **Escenario de fallo con banco socio** (postmortem de Ale): con carga corriendo, el banco socio deja de responder o responde lento. Debe verse `partner_unreachable` o `TIMEOUT`, la alerta `InterbankPartnerUnreachable`, la resolución tras `expiresAt + 300 s` y la conciliación final sin diferencias. Documentar con `docs/postmortems/plantilla.md`.
 
-Si el formato de cuenta del banco 13 no es el nuestro (UUID sin guiones, 32 hex), hay que avisar a Ale: se ajusta en un solo punto del código de Payment/Account.
+Si el formato de cuenta del banco 13 no es el nuestro (UUID sin guiones, 32 hex), avisar a Ale: se ajusta en un solo punto del código de Payment/Account.
 
 ## Si algo falla
 - Alertas: cada una enlaza su runbook en `observability/runbooks/`.
