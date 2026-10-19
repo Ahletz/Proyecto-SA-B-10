@@ -31,8 +31,19 @@ Si el script de login de k6 falla, ajustar los campos de `setup()` en `transfers
 ## Pendiente 3: eventos de Account/Payment hacia Notification y Audit (Alex)
 Bindear colas al routing key `account.anomaly.detected` (payload en `contratos-account-payment.md`). Notification avisa al cliente, Audit lo guarda; enmascarar el correo en logs. Audit puede registrar también `interbank.*` y `account.interbank.*`.
 
-## Pendiente 4: pruebas con el banco socio (Ale + Ángel)
-Depende de que Ángel confirme formato de cuenta, `baseUrl`, API keys y horario. Ahí se prueban depósito entrante y saliente, timeout, reversa y conciliación, y se hace el escenario de banco socio caído. Este es el único punto que sigue con Ale, por ser quien coordina con Ángel.
+## Pendiente 4: pruebas con el banco socio (Ale coordina, Nufio configura)
+Nosotros somos `BANK08`; el grupo 13 (contacto: Ángel) es `BANK13`. Ale es el único punto de contacto con Ángel.
+
+Orden:
+1. **Ángel entrega** (Ale lo recibe): formato de número de cuenta, `baseUrl` de su banco, su API key para que nosotros lo llamemos, una cuenta de prueba (número y titular) y la ventana de pruebas.
+2. **Ale pasa a Nufio** lo anterior. Nufio guarda la `baseUrl` y la API key de `BANK13` en el Secret `bank-interbank-secret`, clave `INTERBANK_PARTNERS`:
+   `{"BANK13":{"baseUrl":"https://HOST/interbank/v1","apiKey":"..."}}`
+   y reinicia Payment: `kubectl -n prod rollout restart deploy/payment-service`.
+3. **Nufio entrega a Ale** (para dársela a Ángel): la URL pública del Gateway (`https://<gateway>/interbank/v1`) y una API key nueva para `BANK13`, que el Gateway valida en `X-Api-Key` y asocia a `BANK13` al reescribir `X-Caller-Bank-Code` (ver diseño, sección Gateway). **Ale la pasa a Ángel por un canal privado.**
+4. **Prueba conjunta** (Ale + Ángel, en la ventana acordada): depósito saliente, depósito entrante, timeout, reversa y conciliación. Ver `diseno-interbancario.md` para los estados esperados.
+5. **Escenario de fallo con banco socio** (postmortem de Ale): con carga corriendo, el banco socio deja de responder o responde lento. Debe verse `partner_unreachable` o `TIMEOUT`, la alerta `InterbankPartnerUnreachable`, la resolución tras `expiresAt + 300 s` y la conciliación final sin diferencias. Documentar con `docs/postmortems/plantilla.md`.
+
+Si el formato de cuenta del banco 13 no es el nuestro (UUID sin guiones, 32 hex), hay que avisar a Ale: se ajusta en un solo punto del código de Payment/Account.
 
 ## Si algo falla
 - Alertas: cada una enlaza su runbook en `observability/runbooks/`.
