@@ -3,6 +3,8 @@ import { ConfigService } from '@nestjs/config';
 import * as amqp from 'amqplib';
 import type { Channel, ChannelModel, ConsumeMessage } from 'amqplib';
 import { BankEvent } from '../common/bank-event';
+import { runWithCorrelationId } from '../common/correlation';
+import { withConsumerSpan, withProducerSpan } from '../common/telemetry';
 
 @Injectable()
 export class RabbitService implements OnModuleDestroy {
@@ -26,9 +28,12 @@ export class RabbitService implements OnModuleDestroy {
 
   async publish<T>(event: BankEvent<T>): Promise<void> {
     const ch = await this.ch();
-    ch.publish('bank.events', event.eventType, Buffer.from(JSON.stringify(event)), {
-      persistent: true, contentType: 'application/json', messageId: event.eventId,
-      correlationId: event.correlationId, timestamp: Date.now(),
+    // El span "publish <eventType>" mete el traceparent en los headers del mensaje.
+    withProducerSpan(event.eventType, event.correlationId, (headers) => {
+      ch.publish('bank.events', event.eventType, Buffer.from(JSON.stringify(event)), {
+        persistent: true, contentType: 'application/json', messageId: event.eventId,
+        correlationId: event.correlationId, timestamp: Date.now(), headers,
+      });
     });
   }
 
@@ -47,8 +52,12 @@ export class RabbitService implements OnModuleDestroy {
     }
     await ch.consume(q, async (m) => {
       if (!m) return;
-      try { await handler(m); ch.ack(m); }
-      catch (e) { this.retryOrDlq(ch, m, e); }
+      // Todo el procesamiento (y sus logs) corre con el correlationId del mensaje y dentro
+      // del span "process <routingKey>", hijo del span de publicación de quien lo envió.
+      await runWithCorrelationId(m.properties.correlationId, async () => {
+        try { await withConsumerSpan(m, () => handler(m)); ch.ack(m); }
+        catch (e) { this.retryOrDlq(ch, m, e); }
+      });
     }, { noAck: false });
     this.logger.log(`${q} subscribed to ${keys.join(', ')}`);
   }
@@ -58,6 +67,7 @@ export class RabbitService implements OnModuleDestroy {
     const count = Number(headers['x-retry-count'] ?? 0);
     const max = Number(this.config.get('RABBITMQ_MAX_RETRIES', 3));
     const ex = count < max ? 'bank.events.retry' : 'bank.events.dlx';
+    // Se conserva traceparent: el reintento sigue siendo parte de la misma traza.
     ch.publish(ex, m.fields.routingKey, m.content, {
       persistent: true, contentType: m.properties.contentType ?? 'application/json',
       messageId: m.properties.messageId, correlationId: m.properties.correlationId,
