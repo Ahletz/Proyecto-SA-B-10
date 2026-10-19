@@ -33,14 +33,16 @@ export class RabbitService implements OnModuleDestroy {
     });
   }
 
-  async subscribe(handler: (m: ConsumeMessage) => Promise<void>) {
+  async subscribe(handler: (m: ConsumeMessage) => Promise<void>, extraKeys: string[] = []) {
     const ch = await this.ch();
     const q = this.c.get('RABBITMQ_QUEUE', 'payment-service.events'); const rq = `${q}.retry`; const dq = `${q}.dlq`;
     const delay = Number(this.c.get('RABBITMQ_RETRY_DELAY_MS', 3000));
     await ch.assertQueue(q, { durable: true });
     await ch.assertQueue(rq, { durable: true, arguments: { 'x-message-ttl': delay, 'x-dead-letter-exchange': 'bank.events' } });
     await ch.assertQueue(dq, { durable: true });
-    for (const [qq, ex] of [[q, 'bank.events'], [rq, 'bank.events.retry'], [dq, 'bank.events.dlx']] as const) await ch.bindQueue(qq, ex, 'account.funds.reserved');
+    for (const key of ['account.funds.reserved', ...extraKeys]) {
+      for (const [qq, ex] of [[q, 'bank.events'], [rq, 'bank.events.retry'], [dq, 'bank.events.dlx']] as const) await ch.bindQueue(qq, ex, key);
+    }
     await ch.consume(q, async (m) => {
       if (!m) return;
       // Todo el procesamiento (y sus logs) corre con el correlationId del mensaje y dentro

@@ -23,6 +23,31 @@ const eventsDuplicate = meter.createCounter('bank.events.duplicate', {
   description: 'Eventos descartados por idempotencia (ya procesados)',
 });
 
+// bank.anomalies.detected -> bank_anomalies_detected_total (sin etiquetas extra).
+const anomalies = meter.createCounter('bank.anomalies.detected', {
+  description: 'Anomalías de actividad detectadas en cuentas',
+});
+
+export function recordAnomaly() {
+  anomalies.add(1);
+}
+
+// bank.interbank.transfers -> bank_interbank_transfers_total{role,state}: cada cambio de estado de un depósito interbancario.
+const interbankTransfers = meter.createCounter('bank.interbank.transfers', {
+  description: 'Transferencias interbancarias por rol (emisor/receptor) y estado',
+});
+const reconciliationMismatches = meter.createCounter('bank.interbank.reconciliation.mismatches', {
+  description: 'Diferencias encontradas en la conciliación diaria con el banco pareja',
+});
+
+export function recordInterbank(role: 'emisor' | 'receptor', state: string) {
+  interbankTransfers.add(1, { role, state });
+}
+
+export function recordReconciliationMismatch(count = 1) {
+  reconciliationMismatches.add(count);
+}
+
 export function recordOperation(operation: string, outcome: Outcome, seconds: number) {
   operations.add(1, { operation, outcome });
   operationDuration.record(seconds, { operation });
@@ -38,6 +63,8 @@ export async function timed<T>(
   operation: string,
   fn: () => Promise<T>,
   classify: (result: T) => Outcome = () => 'success',
+  // Una excepción es technical_error salvo que se indique otra cosa (p. ej. un 4xx del contrato es business_rejection).
+  classifyError: (error: unknown) => Outcome = () => 'technical_error',
 ): Promise<T> {
   const start = process.hrtime.bigint();
   const span = tracer.startSpan(operation);
@@ -48,10 +75,11 @@ export async function timed<T>(
     recordOperation(operation, outcome, Number(process.hrtime.bigint() - start) / 1e9);
     return result;
   } catch (error) {
+    const outcome = classifyError(error);
     span.recordException(error as Error);
-    span.setStatus({ code: SpanStatusCode.ERROR, message: (error as Error)?.message });
-    span.setAttribute('bank.operation.outcome', 'technical_error');
-    recordOperation(operation, 'technical_error', Number(process.hrtime.bigint() - start) / 1e9);
+    if (outcome === 'technical_error') span.setStatus({ code: SpanStatusCode.ERROR, message: (error as Error)?.message });
+    span.setAttribute('bank.operation.outcome', outcome);
+    recordOperation(operation, outcome, Number(process.hrtime.bigint() - start) / 1e9);
     throw error;
   } finally {
     span.end();
