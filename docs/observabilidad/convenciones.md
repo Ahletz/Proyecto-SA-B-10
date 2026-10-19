@@ -12,7 +12,7 @@ Aplica a los 5 microservicios y al API Gateway. Nombres de servicio (`serviceNam
 |---|---|
 | `OTEL_SERVICE_NAME` | el `serviceName` de la lista de arriba |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | `http://otel-collector.observability.svc.cluster.local:4318` (OTLP/HTTP; el Collector también escucha gRPC en `:4317`) |
-| `OTEL_EXPORTER_OTLP_PROTOCOL` | `http/protobuf` |
+| `OTEL_EXPORTER_OTLP_PROTOCOL` | `http/json` en Node (el exporter de Node usa JSON sobre HTTP); el Collector acepta JSON y protobuf |
 | `OTEL_RESOURCE_ATTRIBUTES` | `deployment.environment=<dev\|prod>,service.version=<tag de la imagen>` |
 | `OTEL_TRACES_SAMPLER` | `parentbased_always_on` (el sistema es pequeño y los postmortems necesitan evidencia completa) |
 | `OTEL_SDK_DISABLED` | `true` solo en `docker-compose` local sin Collector; nunca en K8s |
