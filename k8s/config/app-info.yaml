@@ -1,0 +1,10 @@
+# Entorno y versión que los servicios ponen en sus logs JSON y en la telemetría OTel
+# (environment / service.version, ver docs/observabilidad/convenciones.md).
+# En kind local queda "local"; los overlays dev/prod lo reemplazan y el pipeline
+# cambia __APP_VERSION__ por el tag de la imagen desplegada.
+apiVersion: v1
+kind: ConfigMap
+metadata: { name: bank-app-info, namespace: bank-usac }
+data:
+  DEPLOY_ENV: local
+  APP_VERSION: local

@@ -1,0 +1,7 @@
+# reusable-kind-smoke.yml reemplaza __APP_VERSION__ por el tag sha-<commit>.
+apiVersion: v1
+kind: ConfigMap
+metadata: { name: bank-app-info, namespace: bank-usac }
+data:
+  DEPLOY_ENV: dev
+  APP_VERSION: "__APP_VERSION__"

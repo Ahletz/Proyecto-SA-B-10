@@ -1,0 +1,7 @@
+# cd-prod.yml reemplaza __APP_VERSION__ por el tag vX.Y.Z del release.
+apiVersion: v1
+kind: ConfigMap
+metadata: { name: bank-app-info, namespace: bank-usac }
+data:
+  DEPLOY_ENV: prod
+  APP_VERSION: "__APP_VERSION__"

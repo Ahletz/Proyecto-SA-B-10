@@ -132,10 +132,12 @@ jobs:
       - name: Deploy to namespace prod
         env:
           DB_IPS: ${{ vars.PROD_DB_PRIVATE_IPS }}
+          VERSION: ${{ steps.v.outputs.version }}
         run: |
           ip() { jq -er --arg k "$1" '.[$k]' <<<"$DB_IPS"; }
           kubectl kustomize k8s/overlays/prod \
-            | sed -e "s/__CUSTOMER_DB_HOST__/$(ip customer)/" \
+            | sed -e "s/__APP_VERSION__/$VERSION/" \
+                  -e "s/__CUSTOMER_DB_HOST__/$(ip customer)/" \
                   -e "s/__ACCOUNT_DB_HOST__/$(ip account)/" \
                   -e "s/__TRANSACTION_DB_HOST__/$(ip transaction)/" \
                   -e "s/__PAYMENT_DB_HOST__/$(ip payment)/" \
