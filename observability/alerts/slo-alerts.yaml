@@ -1,0 +1,83 @@
+# SLO de disponibilidad: 99.9 % de operaciones sin error técnico (ventana 30 d) => presupuesto de error = 0.1 %.
+# Solo outcome="technical_error" consume presupuesto; los rechazos de negocio no cuentan.
+# Si cambia el objetivo, actualizar 0.001 (= 1 - objetivo) en estas reglas y la variable `slo` del dashboard.
+groups:
+  - name: bank-slo-recording
+    interval: 30s
+    rules:
+      - record: bank:error_ratio:rate5m
+        expr: |
+          sum by (service_name) (rate(bank_operations_total{outcome="technical_error"}[5m]))
+          / sum by (service_name) (rate(bank_operations_total[5m]))
+      - record: bank:error_ratio:rate30m
+        expr: |
+          sum by (service_name) (rate(bank_operations_total{outcome="technical_error"}[30m]))
+          / sum by (service_name) (rate(bank_operations_total[30m]))
+      - record: bank:error_ratio:rate1h
+        expr: |
+          sum by (service_name) (rate(bank_operations_total{outcome="technical_error"}[1h]))
+          / sum by (service_name) (rate(bank_operations_total[1h]))
+      - record: bank:error_ratio:rate6h
+        expr: |
+          sum by (service_name) (rate(bank_operations_total{outcome="technical_error"}[6h]))
+          / sum by (service_name) (rate(bank_operations_total[6h]))
+      - record: bank:burn_rate:1h
+        expr: bank:error_ratio:rate1h / 0.001
+      - record: bank:burn_rate:6h
+        expr: bank:error_ratio:rate6h / 0.001
+      - record: bank:latency_p95_seconds:5m
+        expr: |
+          histogram_quantile(0.95,
+            sum by (le, service_name) (rate(bank_operation_duration_seconds_bucket[5m])))
+
+  - name: bank-slo-alerts
+    rules:
+      # Burn rate rápido: se consume 2 % del presupuesto mensual en 1 h. Ventanas 1 h y 5 m (evita falsos positivos y se apaga rápido).
+      - alert: SloBurnRateFast
+        expr: bank:error_ratio:rate1h > (14.4 * 0.001) and bank:error_ratio:rate5m > (14.4 * 0.001)
+        for: 2m
+        labels: { severity: critical, slo: availability }
+        annotations:
+          summary: "{{ $labels.service_name }} consume el presupuesto de error 14.4x más rápido de lo permitido"
+          description: "Tasa de error técnico (1 h): {{ $value | humanizePercentage }}. A este ritmo el presupuesto mensual se agota en ~2 días."
+          runbook: "observability/runbooks/slo-burn-rate.md"
+      # Burn rate lento: 5 % del presupuesto en 6 h. Detecta degradaciones sostenidas de menor intensidad.
+      - alert: SloBurnRateSlow
+        expr: bank:error_ratio:rate6h > (6 * 0.001) and bank:error_ratio:rate30m > (6 * 0.001)
+        for: 15m
+        labels: { severity: warning, slo: availability }
+        annotations:
+          summary: "{{ $labels.service_name }} consume el presupuesto de error 6x más rápido de lo permitido"
+          description: "Tasa de error técnico (6 h): {{ $value | humanizePercentage }}."
+          runbook: "observability/runbooks/slo-burn-rate.md"
+      - alert: HighLatencyP95
+        expr: bank:latency_p95_seconds:5m > 5
+        for: 10m
+        labels: { severity: warning, slo: latency }
+        annotations:
+          summary: "p95 de {{ $labels.service_name }} supera el SLO de 5 s"
+          description: "p95 actual: {{ $value | humanizeDuration }}."
+          runbook: "observability/runbooks/high-latency.md"
+      - alert: ServiceUnavailable
+        expr: kube_deployment_status_replicas_available{namespace=~"bank-usac|prod|dev"} == 0
+        for: 2m
+        labels: { severity: critical, slo: availability }
+        annotations:
+          summary: "El deployment {{ $labels.deployment }} no tiene réplicas disponibles"
+          runbook: "observability/runbooks/service-unavailable.md"
+
+  - name: bank-interbank-alerts
+    rules:
+      - alert: InterbankPartnerUnreachable
+        expr: sum(increase(bank_interbank_transfers_total{role="emisor", state=~"partner_unreachable|TIMEOUT"}[10m])) > 3
+        for: 1m
+        labels: { severity: warning, area: interbank }
+        annotations:
+          summary: "El banco socio no responde: {{ $value | printf \"%.0f\" }} fallos/timeouts de envío en 10 min"
+          runbook: "observability/runbooks/interbank-partner.md"
+      - alert: InterbankReconciliationMismatch
+        expr: increase(bank_interbank_reconciliation_mismatches_total[15m]) > 0
+        labels: { severity: critical, area: interbank }
+        annotations:
+          summary: "La conciliación interbancaria detectó {{ $value | printf \"%.0f\" }} diferencia(s)"
+          runbook: "observability/runbooks/interbank-reconciliation.md"

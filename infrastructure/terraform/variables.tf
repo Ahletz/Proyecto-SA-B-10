@@ -36,17 +36,17 @@ variable "gke_zone" {
 variable "gke_machine_type" {
   description = "Tipo de máquina de los nodos"
   type        = string
-  default     = "e2-medium"
+  default     = "e2-standard-2"
 }
 
 variable "gke_min_nodes" {
   description = "Mínimo de nodos del node pool (cluster autoscaler)"
   type        = number
-  default     = 1
+  default     = 2
 }
 
 variable "gke_max_nodes" {
   description = "Máximo de nodos del node pool (cluster autoscaler)"
   type        = number
-  default     = 3
+  default     = 4
 }
