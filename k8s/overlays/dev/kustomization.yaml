@@ -8,6 +8,8 @@ resources:
   - ../../base
 components:
   - ../../components/autoscaling
+patches:
+  - path: app-info.yaml
 images:
   - { name: bank-usac/customer-service, newTag: local }
   - { name: bank-usac/account-service, newTag: local }

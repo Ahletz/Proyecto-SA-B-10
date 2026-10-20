@@ -12,6 +12,7 @@ spec:
           image: bank-usac/customer-service:local
           imagePullPolicy: IfNotPresent
           ports: [{containerPort: 8081}]
+          envFrom: [{ configMapRef: { name: bank-app-info } }]
           env:
             - { name: DB_HOST, valueFrom: { configMapKeyRef: { name: bank-db-config, key: CUSTOMER_DB_HOST } } }
             - { name: DB_PORT, valueFrom: { configMapKeyRef: { name: bank-db-config, key: CUSTOMER_DB_PORT } } }

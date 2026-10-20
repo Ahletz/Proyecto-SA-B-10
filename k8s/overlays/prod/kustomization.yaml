@@ -16,6 +16,7 @@ components:
   - ../../components/autoscaling
 patches:
   - path: db-config.yaml
+  - path: app-info.yaml
   - path: gateway-service.yaml
   - patch: |-
       $patch: delete

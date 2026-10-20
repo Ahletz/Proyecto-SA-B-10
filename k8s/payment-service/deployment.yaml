@@ -12,6 +12,7 @@ spec:
           image: bank-usac/payment-service:local
           imagePullPolicy: IfNotPresent
           ports: [{containerPort: 3005}]
+          envFrom: [{ configMapRef: { name: bank-app-info } }]
           env:
             - { name: PORT, value: "3005" }
             - { name: DB_HOST, valueFrom: { configMapKeyRef: { name: bank-db-config, key: PAYMENT_DB_HOST } } }
