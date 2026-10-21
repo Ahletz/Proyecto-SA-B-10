@@ -33,7 +33,11 @@ export class PartnerClient {
       this.logger.error({ message: 'Banco pareja sin configurar', event: 'interbank.partner_not_configured', partnerBankCode: bank });
       return { status: 0, body: null, networkError: 'PARTNER_NOT_CONFIGURED' };
     }
-    const headers: Record<string, string> = { 'X-Api-Key': partner.apiKey, traceparent: currentTraceparent(), Accept: 'application/json' };
+    const headers: Record<string, string> = { 'X-Api-Key': partner.apiKey, Accept: 'application/json' };
+    // Con el SDK activo, la instrumentación de undici ya inyecta traceparent (span del cliente HTTP, hijo de la Saga)
+    // y lo agrega aunque exista otro: poner uno a mano lo duplica ("a, b"), viola el patrón del contrato y el
+    // banco pareja responde 400. Solo se pone a mano cuando OpenTelemetry está apagado.
+    if (process.env.OTEL_SDK_DISABLED === 'true') headers.traceparent = currentTraceparent();
     if (opts.body !== undefined) headers['Content-Type'] = 'application/json';
     if (opts.idempotencyKey) headers['Idempotency-Key'] = opts.idempotencyKey;
     const timeoutMs = Number(this.config.get('INTERBANK_HTTP_TIMEOUT_MS', '5000'));
