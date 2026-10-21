@@ -65,7 +65,9 @@ spec:
             initialDelaySeconds: 15
           resources:
             requests: {cpu: 100m, memory: 256Mi}
-            limits: {cpu: 500m, memory: 700Mi}
+            # 700Mi no alcanzó: OOMKilled al abrir una traza interbancaria de ~170 spans (20 oct).
+            # Solo sube el límite (no la request), así no obliga a agregar nodos.
+            limits: {cpu: 500m, memory: 1536Mi}
           volumeMounts:
             - {name: config, mountPath: /etc/tempo}
             - {name: data, mountPath: /var/tempo}
