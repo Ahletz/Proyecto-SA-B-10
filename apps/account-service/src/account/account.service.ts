@@ -13,6 +13,19 @@ import { AnomalyDetector } from './anomaly-detector';
 
 type StepResult = 'done' | 'rejected' | 'skipped';
 
+const lockWrite = { mode: 'pessimistic_write' } as const;
+
+// Bloquea las cuentas siempre en el mismo orden (accountId ascendente): dos transferencias en sentidos
+// opuestos entre las mismas cuentas ya no pueden esperarse mutuamente (deadlock).
+async function lockInOrder(accounts: Repository<AccountEntity>, ids: string[]) {
+  const locked = new Map<string, AccountEntity>();
+  for (const accountId of [...new Set(ids)].sort()) {
+    const a = await accounts.findOne({ where: { accountId }, lock: lockWrite });
+    if (a) locked.set(accountId, a);
+  }
+  return locked;
+}
+
 @Injectable()
 export class AccountService {
   private readonly logger = new Logger(AccountService.name);
@@ -76,34 +89,48 @@ export class AccountService {
     await this.processed.save({ eventId: event.eventId, eventType: event.eventType, correlationId: event.correlationId, processedAt: new Date() });
   }
 
+  // Cada paso de la Saga corre en UNA transacción con las filas bloqueadas (SELECT ... FOR UPDATE).
+  // Antes se leía la cuenta, se calculaba el saldo en memoria y se guardaba la entidad completa sin
+  // bloqueo: con prefetch 10 y varias réplicas dos eventos de la misma cuenta se pisaban (actualización
+  // perdida: en la prueba de estrés del 21 oct faltaron Q7) y, con transferencias en sentidos opuestos,
+  // Postgres abortaba por deadlock (40P01) y los eventos terminaban en la DLQ. Las dos cuentas se
+  // bloquean siempre en el mismo orden (por accountId) y los eventos se publican después del commit.
   private async reserve(event: BankEvent<any>): Promise<StepResult> {
     const p = event.payload;
-    if (await this.reservations.existsBy({ transactionId: p.transactionId })) return 'skipped';
-    const source = await this.accounts.findOneBy({ accountId: p.sourceAccount });
-    const target = await this.accounts.findOneBy({ accountId: p.targetAccount });
     const amount = Number(p.amount);
-    if (!source || !target || source.status !== 'ACTIVE' || target.status !== 'ACTIVE') {
-      await this.emit('account.funds.rejected', event.correlationId, { transactionId: p.transactionId, reason: 'ACCOUNT_NOT_FOUND_OR_INACTIVE' });
-      return 'rejected';
-    }
-    await this.checkAnomaly(source, p.transactionId, event.correlationId);
-    const fee = Number(source.feeAmount ?? 0);
-    const totalHold = amount + fee;
-    const minBalance = Number(source.minBalance ?? 0);
-    const available = Number(source.balance) - Number(source.reservedBalance) - minBalance;
-    if (available < totalHold) {
-      await this.emit('account.funds.rejected', event.correlationId, { transactionId: p.transactionId, reason: 'INSUFFICIENT_FUNDS' });
-      return 'rejected';
-    }
-    source.reservedBalance = (Number(source.reservedBalance) + totalHold).toFixed(2);
-    source.lastActivityAt = new Date();
-    await this.accounts.save(source);
-    await this.reservations.save({
-      transactionId: p.transactionId, sourceAccount: p.sourceAccount, targetAccount: p.targetAccount,
-      amount: amount.toFixed(2), feeAmount: fee.toFixed(2), status: 'RESERVED', createdAt: new Date(),
+    const outcome = await this.accounts.manager.transaction(async (m) => {
+      const accounts = m.getRepository(AccountEntity);
+      const reservations = m.getRepository(ReservationEntity);
+      const source = await accounts.findOne({ where: { accountId: p.sourceAccount }, lock: lockWrite });
+      // Con la cuenta origen bloqueada, dos entregas del mismo evento no pueden reservar dos veces.
+      if (await reservations.existsBy({ transactionId: p.transactionId })) return { kind: 'skipped' as const };
+      const target = await accounts.findOneBy({ accountId: p.targetAccount });
+      if (!source || !target || source.status !== 'ACTIVE' || target.status !== 'ACTIVE') {
+        return { kind: 'rejected' as const, reason: 'ACCOUNT_NOT_FOUND_OR_INACTIVE', source };
+      }
+      const fee = Number(source.feeAmount ?? 0);
+      const totalHold = amount + fee;
+      const minBalance = Number(source.minBalance ?? 0);
+      const available = Number(source.balance) - Number(source.reservedBalance) - minBalance;
+      if (available < totalHold) return { kind: 'rejected' as const, reason: 'INSUFFICIENT_FUNDS', source };
+      source.reservedBalance = (Number(source.reservedBalance) + totalHold).toFixed(2);
+      source.lastActivityAt = new Date();
+      await accounts.save(source);
+      await reservations.save({
+        transactionId: p.transactionId, sourceAccount: p.sourceAccount, targetAccount: p.targetAccount,
+        amount: amount.toFixed(2), feeAmount: fee.toFixed(2), status: 'RESERVED', createdAt: new Date(),
+      });
+      return { kind: 'reserved' as const, fee, source };
     });
+
+    if (outcome.kind === 'skipped') return 'skipped';
+    if (outcome.source) await this.checkAnomaly(outcome.source, p.transactionId, event.correlationId);
+    if (outcome.kind === 'rejected') {
+      await this.emit('account.funds.rejected', event.correlationId, { transactionId: p.transactionId, reason: outcome.reason });
+      return 'rejected';
+    }
     await this.emit('account.funds.reserved', event.correlationId, {
-      transactionId: p.transactionId, sourceAccount: p.sourceAccount, targetAccount: p.targetAccount, amount, fee,
+      transactionId: p.transactionId, sourceAccount: p.sourceAccount, targetAccount: p.targetAccount, amount, fee: outcome.fee,
     });
     return 'done';
   }
@@ -136,43 +163,57 @@ export class AccountService {
 
   private async complete(event: BankEvent<any>): Promise<StepResult> {
     const tx = event.payload.transactionId;
-    const r = await this.reservations.findOneBy({ transactionId: tx });
-    if (!r || r.status === 'COMPLETED') return 'skipped';
-    const s = await this.accounts.findOneByOrFail({ accountId: r.sourceAccount });
-    const t = await this.accounts.findOneByOrFail({ accountId: r.targetAccount });
-    const amount = Number(r.amount);
-    const fee = Number(r.feeAmount ?? 0);
-    const totalHold = amount + fee;
-    s.balance = (Number(s.balance) - totalHold).toFixed(2);
-    s.reservedBalance = Math.max(0, Number(s.reservedBalance) - totalHold).toFixed(2);
-    s.lastActivityAt = new Date();
-    t.balance = (Number(t.balance) + amount).toFixed(2);
-    t.lastActivityAt = new Date();
-    r.status = 'COMPLETED';
-    await this.accounts.save([s,t]);
-    await this.reservations.save(r);
-    await this.emit('account.transfer.completed', event.correlationId, {
-      transactionId: tx, sourceAccount: s.accountId, targetAccount: t.accountId, amount, fee,
+    const done = await this.accounts.manager.transaction(async (m) => {
+      const accounts = m.getRepository(AccountEntity);
+      const reservations = m.getRepository(ReservationEntity);
+      const r = await reservations.findOne({ where: { transactionId: tx }, lock: lockWrite });
+      if (!r || r.status === 'COMPLETED') return null;
+      const locked = await lockInOrder(accounts, [r.sourceAccount, r.targetAccount]);
+      const s = locked.get(r.sourceAccount);
+      const t = locked.get(r.targetAccount);
+      if (!s || !t) throw new Error(`Cuenta de la reserva ${tx} no encontrada`);
+      const amount = Number(r.amount);
+      const fee = Number(r.feeAmount ?? 0);
+      const totalHold = amount + fee;
+      s.balance = (Number(s.balance) - totalHold).toFixed(2);
+      s.reservedBalance = Math.max(0, Number(s.reservedBalance) - totalHold).toFixed(2);
+      s.lastActivityAt = new Date();
+      t.balance = (Number(t.balance) + amount).toFixed(2);
+      t.lastActivityAt = new Date();
+      r.status = 'COMPLETED';
+      await accounts.save([s, t]);
+      await reservations.save(r);
+      return { sourceAccount: s.accountId, targetAccount: t.accountId, amount, fee };
     });
+    if (!done) return 'skipped';
+    await this.emit('account.transfer.completed', event.correlationId, { transactionId: tx, ...done });
     return 'done';
   }
 
   private async release(event: BankEvent<any>): Promise<StepResult> {
     const tx = event.payload.transactionId;
-    const r = await this.reservations.findOneBy({ transactionId: tx });
-    if (!r || r.status === 'RELEASED') return 'skipped';
-    const s = await this.accounts.findOneByOrFail({ accountId: r.sourceAccount });
-    const totalHold = Number(r.amount) + Number(r.feeAmount ?? 0);
-    s.reservedBalance = Math.max(0, Number(s.reservedBalance) - totalHold).toFixed(2);
-    s.lastActivityAt = new Date();
-    r.status = 'RELEASED';
-    await this.accounts.save(s);
-    await this.reservations.save(r);
+    const released = await this.accounts.manager.transaction(async (m) => {
+      const accounts = m.getRepository(AccountEntity);
+      const reservations = m.getRepository(ReservationEntity);
+      const r = await reservations.findOne({ where: { transactionId: tx }, lock: lockWrite });
+      if (!r || r.status === 'RELEASED') return null;
+      const s = await accounts.findOne({ where: { accountId: r.sourceAccount }, lock: lockWrite });
+      if (!s) throw new Error(`Cuenta de la reserva ${tx} no encontrada`);
+      const totalHold = Number(r.amount) + Number(r.feeAmount ?? 0);
+      s.reservedBalance = Math.max(0, Number(s.reservedBalance) - totalHold).toFixed(2);
+      s.lastActivityAt = new Date();
+      r.status = 'RELEASED';
+      await accounts.save(s);
+      await reservations.save(r);
+      return { amount: Number(r.amount), fee: Number(r.feeAmount ?? 0) };
+    });
+    if (!released) return 'skipped';
     await this.emit('account.funds.released', event.correlationId, {
-      transactionId: tx, amount: Number(r.amount), fee: Number(r.feeAmount ?? 0), reason: 'SAGA_COMPENSATION',
+      transactionId: tx, ...released, reason: 'SAGA_COMPENSATION',
     });
     return 'done';
   }
+
 
   @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT)
   async deactivateInactive() {
