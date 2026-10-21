@@ -48,7 +48,7 @@ jobs:
       NAMESPACE: prod
       SERVICES: >-
         customer-service account-service transaction-service payment-service
-        notification-audit-service api-gateway
+        notification-audit-service api-gateway interbank-mock
 
     steps:
       - name: Checkout repository

@@ -40,7 +40,7 @@ jobs:
       TAG: ${{ inputs.tag }}
       SERVICES: >-
         customer-service account-service transaction-service payment-service
-        notification-audit-service api-gateway frontend
+        notification-audit-service api-gateway interbank-mock frontend
 
     steps:
       - name: Checkout repository

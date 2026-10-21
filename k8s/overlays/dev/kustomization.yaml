@@ -17,4 +17,5 @@ images:
   - { name: bank-usac/payment-service, newTag: local }
   - { name: bank-usac/notification-audit-service, newTag: local }
   - { name: bank-usac/api-gateway, newTag: local }
+  - { name: bank-usac/interbank-mock, newTag: local }
   - { name: bank-usac/frontend, newTag: local }
