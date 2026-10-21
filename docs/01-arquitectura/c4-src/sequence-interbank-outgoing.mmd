@@ -1,0 +1,44 @@
+---
+title: Secuencia — Depósito interbancario saliente aceptado (Fase 3)
+---
+sequenceDiagram
+    autonumber
+    actor C as Cliente
+    participant F as Frontend
+    participant G as API Gateway
+    participant MQ as RabbitMQ
+    participant T as Transaction
+    participant A as Account
+    participant P as Payment
+    participant B as Banco pareja<br/>(BANK13 o mock BANK99)
+
+    C->>F: Otro banco: origen, banco, cuenta destino, monto
+    F->>G: POST /api/interbank-transfers + JWT
+    G->>A: GET /api/accounts/:source (ownership)
+    G->>MQ: transaction.interbank.requested (traceparent)
+    G-->>F: 202 {correlationId, traceId, PENDING}
+    MQ->>T: transaction.interbank.requested
+    Note over T: valida KYC VERIFIED y monto ≤ INTERBANK_MAX_AMOUNT<br/>guarda PENDING · span transaction.saga.start
+    T->>MQ: interbank.transfer.requested (interbankTransferId = transactionId)
+    MQ->>A: interbank.transfer.requested
+    Note over A: reserva monto + comisión<br/>(SELECT … FOR UPDATE)
+    A->>MQ: account.interbank.funds.reserved
+    MQ->>T: account.interbank.funds.reserved → PROCESSING
+    MQ->>P: account.interbank.funds.reserved
+    P->>B: POST /transfers · X-Api-Key · Idempotency-Key · traceparent<br/>expiresAt = createdAt + 180 s
+    B-->>P: 202 PROCESSING
+    P->>MQ: interbank.transfer.sent
+    MQ->>T: SENT
+    B->>G: POST /interbank/v1/transfers/{id}/result (ACCEPTED) · X-Api-Key · traceparent
+    G->>P: reenvía con X-Caller-Bank-Code reescrito
+    P-->>B: 200
+    P->>MQ: interbank.transfer.accepted
+    MQ->>T: ACCEPTED
+    MQ->>A: interbank.transfer.accepted
+    Note over A: confirma el débito y libera la reserva
+    A->>MQ: account.interbank.transfer.completed
+    MQ->>T: COMPLETED (interbankState ACCEPTED)
+    F->>G: GET /api/interbank-transfers/:correlationId (cada 3 s)
+    G-->>F: COMPLETED · ACCEPTED
+
+    Note over T,A: Rechazo: interbank.transfer.rejected → Account libera la reserva<br/>(account.interbank.funds.released) → Transaction COMPENSATED / REJECTED<br/>con span transaction.saga.compensate
