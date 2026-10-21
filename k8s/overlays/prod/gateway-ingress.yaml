@@ -1,0 +1,23 @@
+# Entrada HTTPS pública del API Gateway (contrato interbancario: solo HTTPS).
+# IP global fija: infrastructure/terraform/gateway_ip.tf (output gateway_ip = 35.244.157.47).
+# Host: 35-244-157-47.sslip.io (sslip.io resuelve el nombre a esa IP); certificado gestionado por Google.
+# Sin HTTP (allow-http=false): solo se crea la regla de reenvío del 443.
+apiVersion: networking.gke.io/v1
+kind: ManagedCertificate
+metadata: { name: gateway-cert, namespace: bank-usac }
+spec:
+  domains: ["35-244-157-47.sslip.io"]
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: api-gateway
+  namespace: bank-usac
+  annotations:
+    kubernetes.io/ingress.class: gce
+    kubernetes.io/ingress.global-static-ip-name: bank-usac-gateway-ip
+    networking.gke.io/managed-certificates: gateway-cert
+    kubernetes.io/ingress.allow-http: "false"
+spec:
+  defaultBackend:
+    service: { name: api-gateway, port: { number: 8080 } }

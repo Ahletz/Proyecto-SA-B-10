@@ -12,6 +12,7 @@ namespace: prod
 resources:
   - namespace.yaml
   - ../../base
+  - gateway-ingress.yaml
 components:
   - ../../components/autoscaling
 patches:
