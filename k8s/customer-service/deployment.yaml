@@ -14,6 +14,8 @@ spec:
           ports: [{containerPort: 8081}]
           envFrom: [{ configMapRef: { name: bank-app-info } }]
           env:
+            # Pool por réplica (db-f1-micro ~25 conexiones; HPA hasta 5 réplicas: 5 x 4 = 20).
+            - { name: SPRING_DATASOURCE_HIKARI_MAXIMUMPOOLSIZE, value: "4" }
             - { name: DB_HOST, valueFrom: { configMapKeyRef: { name: bank-db-config, key: CUSTOMER_DB_HOST } } }
             - { name: DB_PORT, valueFrom: { configMapKeyRef: { name: bank-db-config, key: CUSTOMER_DB_PORT } } }
             - { name: DB_DATABASE, valueFrom: { configMapKeyRef: { name: bank-db-config, key: CUSTOMER_DB_NAME } } }
