@@ -27,8 +27,10 @@ spec:
             - { name: PAYMENT_ADMIN_TOKEN, valueFrom: { secretKeyRef: { name: bank-interbank-secret, key: ADMIN_TOKEN, optional: true } } }
             - { name: INTERBANK_API_KEYS, valueFrom: { secretKeyRef: { name: gateway-interbank-keys, key: INTERBANK_API_KEYS, optional: true } } }
           resources: { requests: { cpu: 100m, memory: 96Mi }, limits: { cpu: 500m, memory: 256Mi } }
-          readinessProbe: { httpGet: { path: /health, port: 8080 }, initialDelaySeconds: 5, periodSeconds: 5 }
-          livenessProbe: { httpGet: { path: /health, port: 8080 }, periodSeconds: 10, failureThreshold: 3 }
+          # timeoutSeconds 3: con la CPU al límite /health tardaba más de 1 s (valor por defecto) y la liveness
+          # reiniciaba el Gateway bajo carga (prueba de estrés de la Fase 3).
+          readinessProbe: { httpGet: { path: /health, port: 8080 }, initialDelaySeconds: 5, periodSeconds: 5, timeoutSeconds: 3 }
+          livenessProbe: { httpGet: { path: /health, port: 8080 }, periodSeconds: 10, timeoutSeconds: 3, failureThreshold: 3 }
           # Hasta 150 s para arrancar (espera a RabbitMQ y la DB); mientras tanto no corre la liveness.
           startupProbe: { httpGet: { path: /health, port: 8080 }, periodSeconds: 5, failureThreshold: 30 }
 ---
