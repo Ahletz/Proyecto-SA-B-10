@@ -6,6 +6,7 @@ import {
   internalStatusesFor,
   toPublicStatus,
 } from '../../domain/enums/public-transaction-status.enum';
+import { InterbankState } from '../../domain/enums/interbank-state.enum';
 import { TransactionStatus } from '../../domain/enums/transaction-status.enum';
 
 export const MAX_HISTORY_PAGE_SIZE = 100;
@@ -29,6 +30,9 @@ export interface TransactionHistoryItem {
   detailedStatus: TransactionStatus;
   failureReason: string | null;
   correlationId: string;
+  // Depósito interbancario (Fase 3); null en transferencias internas.
+  destinationBankCode: string | null;
+  interbankState: InterbankState | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -79,6 +83,8 @@ export class GetTransactionHistoryService {
         detailedStatus: t.status,
         failureReason: t.failureReason,
         correlationId: t.correlationId,
+        destinationBankCode: t.destinationBankCode,
+        interbankState: t.interbankState,
         createdAt: t.createdAt,
         updatedAt: t.updatedAt,
       })),

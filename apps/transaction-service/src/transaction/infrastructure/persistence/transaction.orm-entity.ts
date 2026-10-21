@@ -5,6 +5,7 @@ import {
   PrimaryColumn,
 } from 'typeorm';
 import { TransactionStatus } from '../../domain/enums/transaction-status.enum';
+import { InterbankState } from '../../domain/enums/interbank-state.enum';
 
 @Entity({ name: 'transactions' })
 @Index('idx_transactions_source_created', ['sourceAccount', 'createdAt'])
@@ -52,6 +53,23 @@ export class TransactionOrmEntity {
     nullable: true,
   })
   failureReason: string | null;
+
+  // Depósito interbancario saliente (Fase 3); null en transferencias internas.
+  @Column({
+    name: 'destination_bank_code',
+    type: 'varchar',
+    length: 10,
+    nullable: true,
+  })
+  destinationBankCode: string | null;
+
+  @Column({
+    name: 'interbank_state',
+    type: 'varchar',
+    length: 20,
+    nullable: true,
+  })
+  interbankState: InterbankState | null;
 
   @Column({
     name: 'correlation_id',

@@ -18,6 +18,18 @@ interface TransactionCreatedPayload {
   status: TransactionStatus;
 }
 
+// Fase 3 (docs/interbank/diseno-interbancario.md §4): lo consume Account,
+// que reserva monto + comisión; interbankTransferId = transactionId.
+interface InterbankTransferRequestedPayload {
+  transactionId: string;
+  sourceAccount: string;
+  destinationBankCode: string;
+  destinationAccount: string;
+  amount: number;
+  currency: 'GTQ';
+  description?: string;
+}
+
 // Contrato Fase 2 (sección 2.2): lo consume Notification & Audit.
 interface TransactionStatusChangedPayload {
   transactionId: string;
@@ -83,6 +95,47 @@ export class TransactionEventPublisher {
             transaction.amount,
           status:
             transaction.status,
+        },
+        causationId,
+      );
+
+    await this.rabbitMqService.publish(
+      event.eventType,
+      event,
+    );
+
+    await this.publishStatusChanged(
+      transaction,
+      causationId,
+    );
+  }
+
+  /**
+   * Inicio de la Saga interbancaria. No se publica transaction.created:
+   * Account lo usa para reservar una transferencia interna.
+   */
+  async publishInterbankTransferRequested(
+    transaction: Transaction,
+    description?: string,
+    causationId?: string,
+  ): Promise<void> {
+    const event: BankEvent<InterbankTransferRequestedPayload> =
+      this.createEvent(
+        'interbank.transfer.requested',
+        transaction,
+        {
+          transactionId:
+            transaction.transactionId,
+          sourceAccount:
+            transaction.sourceAccount,
+          destinationBankCode:
+            transaction.destinationBankCode ?? '',
+          destinationAccount:
+            transaction.targetAccount,
+          amount:
+            transaction.amount,
+          currency: 'GTQ',
+          description,
         },
         causationId,
       );
