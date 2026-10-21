@@ -14,13 +14,15 @@ function response() {
 describe('InterbankController (Gateway)', () => {
   let calls: { url: string; init: RequestInit }[];
   beforeEach(() => {
+    // Sin SDK (como en los tests) el Gateway reenvía el traceparent a mano.
+    process.env.OTEL_SDK_DISABLED = 'true';
     calls = [];
     vi.stubGlobal('fetch', vi.fn(async (url: string, init: RequestInit) => {
       calls.push({ url, init });
       return { status: 202, headers: new Headers({ 'content-type': 'application/json' }), text: async () => '{"status":"PROCESSING"}' } as Response;
     }));
   });
-  afterEach(() => vi.unstubAllGlobals());
+  afterEach(() => { vi.unstubAllGlobals(); delete process.env.OTEL_SDK_DISABLED; });
 
   it('reenvía a Payment con el banco dueño de la clave, aunque el cliente mande otro X-Caller-Bank-Code', async () => {
     const { r, res } = response();

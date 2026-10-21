@@ -9,6 +9,8 @@ import {
 } from '../../application/ports/transaction.repository';
 import { Transaction } from '../../domain/entities/transaction.entity';
 import { TransactionOrmEntity } from './transaction.orm-entity';
+import { recordSagaState } from '../../../common/telemetry';
+import { toPublicStatus } from '../../domain/enums/public-transaction-status.enum';
 
 @Injectable()
 export class TypeOrmTransactionRepository
@@ -25,6 +27,17 @@ export class TypeOrmTransactionRepository
     const entity = this.toPersistence(transaction);
 
     await this.repository.save(entity);
+
+    // Todo cambio de estado de la Saga pasa por aquí: queda como evento del
+    // span activo (process <evento>), así la traza muestra PENDING ->
+    // PROCESSING -> COMPLETED/FAILED y las compensaciones.
+    recordSagaState({
+      'bank.transaction.id': transaction.transactionId,
+      'bank.transaction.state': transaction.status,
+      'bank.transaction.public_state': toPublicStatus(transaction.status),
+      'bank.interbank.state': transaction.interbankState,
+      'bank.transaction.failure_reason': transaction.failureReason,
+    });
   }
 
   async findById(

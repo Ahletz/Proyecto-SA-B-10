@@ -21,7 +21,11 @@ export function bankForKey(keys:Record<string,string>,apiKey:string|undefined){i
  private guarded(req:any,res:Res,h:Record<string,string>,method:string,path:string){
   const bank=bankForKey(this.keys,h['x-api-key']);if(!bank)return error(res,401,'UNAUTHORIZED','API key ausente o inválida');
   if(!TRACEPARENT.test(h['traceparent']??''))return error(res,400,'VALIDATION_ERROR','Falta el header traceparent (W3C Trace Context) o es inválido');
-  const headers:Record<string,string>={'x-caller-bank-code':bank,traceparent:h['traceparent']};if(h['tracestate'])headers.tracestate=h['tracestate'];if(h['idempotency-key'])headers['idempotency-key']=h['idempotency-key'];
+  const headers:Record<string,string>={'x-caller-bank-code':bank};
+  // Con OpenTelemetry activo el span HTTP ya continúa el traceparent del banco pareja y la instrumentación de undici
+  // lo propaga a Payment (agregarlo a mano lo duplicaría: "a, b"). Sin SDK se reenvía tal cual.
+  if(process.env.OTEL_SDK_DISABLED==='true'){headers.traceparent=h['traceparent'];if(h['tracestate'])headers.tracestate=h['tracestate'];}
+  if(h['idempotency-key'])headers['idempotency-key']=h['idempotency-key'];
   return this.forward(res,method,path,method==='POST'?JSON.stringify(req.body??{}):undefined,headers);}
  private async forward(res:Res,method:string,path:string,body:string|undefined,headers:Record<string,string>){
   const cid=currentCorrelationId();
