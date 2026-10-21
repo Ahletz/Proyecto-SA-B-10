@@ -102,7 +102,12 @@ createServer(async (req, res) => {
   const url = new URL(req.url ?? '/', 'http://mock');
   try {
     if (url.pathname === '/health') return write(res, { status: 200, body: { status: 'UP' } });
-    if (url.pathname.startsWith('/interbank/v1/')) return write(res, await contract(req, url.pathname.slice('/interbank/v1'.length), url.searchParams));
+    if (url.pathname.startsWith('/interbank/v1/')) {
+      const r = await contract(req, url.pathname.slice('/interbank/v1'.length), url.searchParams);
+      // Cada rechazo queda en el log con su motivo: es la evidencia de por qué el banco pareja respondió así.
+      if (r.status >= 400) log('WARN', 'mock.request.rejected', { method: req.method, path: url.pathname, httpStatus: r.status, ...(r.body as object) });
+      return write(res, r);
+    }
     if (url.pathname.startsWith('/admin/')) return write(res, await admin(req, url.pathname.slice('/admin'.length)));
     write(res, fail(404, 'NOT_FOUND', 'Ruta desconocida'));
   } catch (e) {
