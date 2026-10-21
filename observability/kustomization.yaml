@@ -18,6 +18,8 @@ configMapGenerator:
     files:
       - dashboards/bank-overview.json
       - dashboards/bank-slo.json
+      - dashboards/bank-infra.json
+      - dashboards/bank-transactions.json
     options:
       disableNameSuffixHash: true
   - name: prometheus-rules

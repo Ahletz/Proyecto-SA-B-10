@@ -16,7 +16,8 @@ spec:
       containers:
         - name: rabbitmq
           image: rabbitmq:4.3.6-management
-          ports: [{containerPort: 5672},{containerPort: 15672}]
+          # 15692: plugin rabbitmq_prometheus (activo en la imagen); Prometheus lee ahí el consumer lag por cola.
+          ports: [{containerPort: 5672},{containerPort: 15672},{containerPort: 15692}]
           env:
             - { name: RABBITMQ_DEFAULT_USER, valueFrom: { secretKeyRef: { name: rabbitmq-secret, key: username } } }
             - { name: RABBITMQ_DEFAULT_PASS, valueFrom: { secretKeyRef: { name: rabbitmq-secret, key: password } } }
@@ -29,7 +30,7 @@ spec:
 apiVersion: v1
 kind: Service
 metadata: { name: rabbitmq, namespace: bank-usac }
-spec: { selector: { app: rabbitmq }, ports: [{name: amqp,port: 5672,targetPort: 5672},{name: management,port: 15672,targetPort: 15672}] }
+spec: { selector: { app: rabbitmq }, ports: [{name: amqp,port: 5672,targetPort: 5672},{name: management,port: 15672,targetPort: 15672},{name: prometheus,port: 15692,targetPort: 15692}] }
 ---
 apiVersion: apps/v1
 kind: Deployment
