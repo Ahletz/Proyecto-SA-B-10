@@ -42,3 +42,4 @@ images:
   - { name: bank-usac/payment-service, newName: ghcr.io/ahletz/bank-usac/payment-service, newTag: v0.0.0 }
   - { name: bank-usac/notification-audit-service, newName: ghcr.io/ahletz/bank-usac/notification-audit-service, newTag: v0.0.0 }
   - { name: bank-usac/api-gateway, newName: ghcr.io/ahletz/bank-usac/api-gateway, newTag: v0.0.0 }
+  - { name: bank-usac/interbank-mock, newName: ghcr.io/ahletz/bank-usac/interbank-mock, newTag: v0.0.0 }

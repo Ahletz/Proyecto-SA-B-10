@@ -31,7 +31,7 @@ concurrency:
 env:
   SERVICES: >-
     customer-service account-service transaction-service payment-service
-    notification-audit-service api-gateway frontend
+    notification-audit-service api-gateway interbank-mock frontend
 
 jobs:
   version:
@@ -80,6 +80,7 @@ jobs:
           - payment-service
           - notification-audit-service
           - api-gateway
+          - interbank-mock
           - frontend
 
     steps:
