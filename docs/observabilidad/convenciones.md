@@ -71,7 +71,7 @@ Prefijo `bank_` y unidad al final. **En el código** se declaran en la notación
 | `bank.operation.duration` (unidad `s`) | `bank_operation_duration_seconds_bucket` | histograma | `operation` |
 | `bank.events.processed` | `bank_events_processed_total` | contador | `event_type`, `outcome` |
 | `bank.events.duplicate` | `bank_events_duplicate_total` | contador | `event_type` |
-| `bank.interbank.transfers` | `bank_interbank_transfers_total` | contador | `role` (`sender`/`receiver`), `state` |
+| `bank.interbank.transfers` | `bank_interbank_transfers_total` | contador | `role` (`emisor`/`receptor`), `state` |
 
 El Collector agrega solo las etiquetas `service_name` y `deployment_environment` a toda métrica; no se declaran a mano.
 
