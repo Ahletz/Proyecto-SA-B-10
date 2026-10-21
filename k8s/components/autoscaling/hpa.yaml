@@ -60,3 +60,17 @@ spec:
   # ventana el HPA escala sin carga real. Solo sube si la CPU sigue alta 120 s.
   behavior:
     scaleUp: { stabilizationWindowSeconds: 120 }
+---
+# API Gateway (Fase 3): sin HPA era el cuello de botella en la prueba de estrés (1 réplica al 280 %
+# de su request de CPU, liveness vencida y reinicio en plena carga). Es stateless: escala igual que los
+# servicios. Máximo 3: cada réplica abre su conexión a RabbitMQ y no usa base de datos.
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata: { name: api-gateway, namespace: bank-usac }
+spec:
+  scaleTargetRef: { apiVersion: apps/v1, kind: Deployment, name: api-gateway }
+  minReplicas: 1
+  maxReplicas: 3
+  metrics:
+    - type: Resource
+      resource: { name: cpu, target: { type: Utilization, averageUtilization: 80 } }

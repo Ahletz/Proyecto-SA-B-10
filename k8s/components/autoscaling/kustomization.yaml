@@ -1,5 +1,5 @@
 # Requests/limits de CPU y memoria, rolling update sin downtime y HPA al 80 % de CPU
-# para los 5 microservicios (sección 2.5 del plan de distribución).
+# para los 5 microservicios (sección 2.5 del plan de distribución) y, desde la Fase 3, el API Gateway.
 apiVersion: kustomize.config.k8s.io/v1alpha1
 kind: Component
 resources:
@@ -8,7 +8,7 @@ patches:
   - path: scaling-patch.yaml
     target:
       kind: Deployment
-      name: "^(customer-service|account-service|transaction-service|payment-service|notification-audit-service)$"
+      name: "^(customer-service|account-service|transaction-service|payment-service|notification-audit-service|api-gateway)$"
   - path: prestop-patch.yaml
     target:
       kind: Deployment
