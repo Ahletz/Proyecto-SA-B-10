@@ -83,5 +83,25 @@ Se mitigó bajando el máximo del HPA a 2 réplicas, se corrigió en `v0.5.3` (P
 | Pool de 4 conexiones por réplica en los 5 servicios (`DB_POOL_MAX`, Hikari `maximumPoolSize`), de modo que réplicas máximas × pool ≤ conexiones de la base (PR #51) | Nufio | 21 oct (hecho, `v0.5.3`) |
 | Reprocesar la DLQ de Account y verificar saldos | Nufio | 21 oct (hecho) |
 | Incluir `error.message` y `code` en los logs de reintento y de envío a la DLQ de Account | Ale (I1, dueña de Account) | 23 oct |
-| Volver a correr el perfil `stress` con `v0.5.3` para confirmar la corrección con carga real | Nufio | 22 oct |
-| Documentar la regla réplicas máximas del HPA × pool ≤ `max_connections` de la base en el runbook de despliegue | Nufio | 23 oct |
+| Volver a correr el perfil `stress` para confirmar la corrección con carga real | Nufio | 21 oct (hecho, ver *Verificación*) |
+| Documentar la regla réplicas máximas del HPA × pool ≤ `max_connections` de la base | Nufio | 21 oct (hecho, [despliegue Fase 3](../04-despliegue/07-despliegue-fase3.md)) |
+| HPA del API Gateway de 1 a 3 réplicas y sondas con `timeoutSeconds: 3` (PR #58), por el hallazgo de la segunda corrida | Nufio | 21 oct (hecho, `v0.5.5`) |
+
+## Verificación
+
+Mismo perfil `stress` de k6 (`tests/load/transfers.js`, hasta 200 VUs, 6 min) contra prod:
+
+| | 1.ª corrida (`v0.5.2`) | 2.ª corrida (`v0.5.4`) | 3.ª corrida (`v0.5.5`) |
+|---|---|---|---|
+| Ventana (UTC) | 05:40–06:30 | 11:37–11:43 | 15:17–15:23 |
+| Transferencias aceptadas (202) | 70 % | 84,8 % (3684 / 4344) | **99,4 %** (3676 / 3699) |
+| `http_req_failed` | — | 28,96 % | **0,77 %** (umbral < 1 %, cumple) |
+| p95 de creación | — | 3,44 s | 3,53 s (umbral < 5 s, cumple) |
+| Errores técnicos en Account | 1294 a la DLQ | 0 | 0 (y 0 en todos los servicios) |
+| Reinicios del Gateway | — | 1 (liveness vencida a las 11:41:47) | 0 |
+| Saldos | Reservas atascadas | Total Q5081.5, reservado 0 | Total Q5081.5, reservado 0 |
+
+- **La corrección de Account se sostiene:** dos corridas seguidas sin errores técnicos ni mensajes en la DLQ.
+- **Gateway:** el HPA subió a 2 réplicas a las 15:18:59 y a 3 a las 15:20:02, sin reinicios. Con 3 réplicas la CPU siguió entre 142 % y 198 % del request, así que el Gateway sigue siendo el techo de capacidad (unas 9,6 transferencias por segundo). k6 descartó 830 iteraciones porque los 200 VUs estaban ocupados esperando respuesta; no son errores del sistema, pero muestran que la carga ofrecida superó esa capacidad.
+- **Pendiente fuera de esta corrección:** la cola `notification-audit.events` llegó a 12 144 mensajes y se vacía despacio. Notification & Audit es de Integrante 2 y no afecta la Saga.
+
