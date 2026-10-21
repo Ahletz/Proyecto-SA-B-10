@@ -48,6 +48,15 @@ data:
       - job_name: kube-state-metrics
         static_configs:
           - targets: ["kube-state-metrics.observability.svc.cluster.local:8080"]
+      # Consumer lag y throughput del broker por cola/exchange (plugin rabbitmq_prometheus).
+      # /metrics/detailed con solo las familias que usan los dashboards, para no traer métricas de más.
+      - job_name: rabbitmq
+        metrics_path: /metrics/detailed
+        params:
+          family: [queue_coarse_metrics, queue_consumer_count, queue_delivery_metrics, exchange_metrics]
+        static_configs:
+          - targets: ["rabbitmq.prod.svc.cluster.local:15692"]
+            labels: { namespace: prod }
       - job_name: cadvisor
         scheme: https
         tls_config:
