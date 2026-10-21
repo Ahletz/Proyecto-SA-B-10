@@ -32,3 +32,8 @@ output "frontend_run_service_account" {
   description = "Service account del servicio Cloud Run del frontend (vars.FRONTEND_RUN_SA en GitHub)"
   value       = google_service_account.frontend_run.email
 }
+
+output "gateway_ip" {
+  description = "IP del Ingress HTTPS del Gateway; el host público es <ip con guiones>.sslip.io"
+  value       = google_compute_global_address.gateway.address
+}
