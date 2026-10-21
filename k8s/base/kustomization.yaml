@@ -11,4 +11,5 @@ resources:
   - ../payment-service
   - ../notification-audit-service
   - ../api-gateway
+  - ../interbank-mock
   - ../frontend

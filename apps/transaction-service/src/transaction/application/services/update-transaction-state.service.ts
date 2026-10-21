@@ -3,6 +3,7 @@ import { Injectable } from '@nestjs/common';
 import { TransactionRepository } from '../ports/transaction.repository';
 import { Transaction } from '../../domain/entities/transaction.entity';
 import { TransactionStatus } from '../../domain/enums/transaction-status.enum';
+import { InterbankState } from '../../domain/enums/interbank-state.enum';
 
 /**
  * Avance de la Saga. Un evento que pide un estado de una etapa igual o
@@ -155,6 +156,48 @@ export class UpdateTransactionStateService {
     );
 
     return transaction;
+  }
+
+  /** Depósito interbancario: el orden y los estados finales los cuida la entidad. */
+  async advanceInterbank(
+    transactionId: string,
+    state: InterbankState,
+    reason?: string,
+  ): Promise<{ transaction: Transaction; changed: boolean }> {
+    const transaction =
+      await this.getTransaction(transactionId);
+
+    const changed =
+      transaction.advanceInterbank(state, reason);
+
+    if (changed) {
+      await this.transactionRepository.save(
+        transaction,
+      );
+    }
+
+    return { transaction, changed };
+  }
+
+  async settleInterbank(
+    transactionId: string,
+    status:
+      | TransactionStatus.COMPLETED
+      | TransactionStatus.COMPENSATED,
+  ): Promise<{ transaction: Transaction; changed: boolean }> {
+    const transaction =
+      await this.getTransaction(transactionId);
+
+    const changed =
+      transaction.settleInterbank(status);
+
+    if (changed) {
+      await this.transactionRepository.save(
+        transaction,
+      );
+    }
+
+    return { transaction, changed };
   }
 
   private async getTransaction(

@@ -7,6 +7,7 @@ on:
     paths:
       - 'apps/transaction-service/**'
       - 'apps/api-gateway/**'
+      - 'apps/interbank-mock/**'
       - 'k8s/**'
       - '.github/workflows/integrante3-ci.yml'
       - '.github/workflows/reusable-node-ci.yml'
@@ -17,6 +18,7 @@ on:
     paths:
       - 'apps/transaction-service/**'
       - 'apps/api-gateway/**'
+      - 'apps/interbank-mock/**'
       - 'k8s/**'
       - '.github/workflows/integrante3-ci.yml'
       - '.github/workflows/reusable-node-ci.yml'
@@ -38,6 +40,7 @@ jobs:
     outputs:
       transaction-service: ${{ steps.filter.outputs.transaction-service }}
       api-gateway: ${{ steps.filter.outputs.api-gateway }}
+      interbank-mock: ${{ steps.filter.outputs.interbank-mock }}
       k8s: ${{ steps.filter.outputs.k8s }}
     steps:
       - name: Checkout repository
@@ -58,6 +61,9 @@ jobs:
             api-gateway:
               - *workflow
               - 'apps/api-gateway/**'
+            interbank-mock:
+              - *workflow
+              - 'apps/interbank-mock/**'
             k8s:
               - '.github/workflows/integrante3-ci.yml'
               - 'k8s/**'
@@ -78,6 +84,14 @@ jobs:
     uses: ./.github/workflows/reusable-node-ci.yml
     with:
       service: api-gateway
+
+  interbank-mock:
+    name: Interbank mock - Build and Test
+    needs: changes
+    if: needs.changes.outputs.interbank-mock == 'true'
+    uses: ./.github/workflows/reusable-node-ci.yml
+    with:
+      service: interbank-mock
 
   k8s-manifests:
     name: Kubernetes - Validate manifests

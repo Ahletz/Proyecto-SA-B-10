@@ -1,0 +1,36 @@
+# Simulador del banco pareja (BANK99) para desarrollo y escenarios de fallo (Fase 3).
+# Payment lo llama como un banco más (INTERBANK_PARTNERS: BANK99 -> http://interbank-mock:3010/interbank/v1)
+# y el mock responde por callback a través del Gateway (INTERBANK_API_KEYS: BANK99), igual que un banco real.
+# Las claves viven en el Secret interbank-mock-secret, creado fuera del repo. Modo de fallo en caliente:
+# kubectl port-forward svc/interbank-mock 3010 + POST /admin/config (X-Admin-Token). Ver apps/interbank-mock/README.md.
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: interbank-mock, namespace: bank-usac }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: interbank-mock } }
+  template:
+    metadata: { labels: { app: interbank-mock } }
+    spec:
+      containers:
+        - name: interbank-mock
+          image: bank-usac/interbank-mock:local
+          imagePullPolicy: IfNotPresent
+          ports: [{containerPort: 3010}]
+          envFrom: [{ configMapRef: { name: bank-app-info } }]
+          env:
+            - { name: PORT, value: "3010" }
+            - { name: MOCK_BANK_CODE, value: "BANK99" }
+            - { name: PARTNER_BANK_CODE, value: "BANK08" }
+            - { name: PARTNER_BASE_URL, value: "http://api-gateway:8080/interbank/v1" }
+            - { name: MOCK_INBOUND_API_KEY, valueFrom: { secretKeyRef: { name: interbank-mock-secret, key: MOCK_INBOUND_API_KEY, optional: true } } }
+            - { name: MOCK_OUTBOUND_API_KEY, valueFrom: { secretKeyRef: { name: interbank-mock-secret, key: MOCK_OUTBOUND_API_KEY, optional: true } } }
+            - { name: MOCK_ADMIN_TOKEN, valueFrom: { secretKeyRef: { name: interbank-mock-secret, key: MOCK_ADMIN_TOKEN, optional: true } } }
+          resources: { requests: { cpu: 20m, memory: 48Mi }, limits: { cpu: 200m, memory: 128Mi } }
+          readinessProbe: { httpGet: { path: /health, port: 3010 }, initialDelaySeconds: 2, periodSeconds: 5 }
+          livenessProbe: { httpGet: { path: /health, port: 3010 }, periodSeconds: 10, failureThreshold: 3 }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: interbank-mock, namespace: bank-usac }
+spec: { selector: { app: interbank-mock }, ports: [{ port: 3010, targetPort: 3010 }] }
