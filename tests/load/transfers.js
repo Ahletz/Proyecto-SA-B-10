@@ -1,7 +1,7 @@
 // Prueba de carga de transferencias internas por el API Gateway (Fase 3).
 // Recorre Gateway -> Transaction -> RabbitMQ -> Account -> Payment (Saga completa).
 //
-// Variables (-e): BASE_URL, EMAIL, PASSWORD, SOURCE_ACCOUNT, TARGET_ACCOUNT (ambas del cliente EMAIL),
+// Variables (-e): BASE_URL, USERNAME, PASSWORD, SOURCE_ACCOUNT, TARGET_ACCOUNT (ambas del cliente USERNAME),
 //   PROFILE = smoke | load | stress   (por defecto load),  AMOUNT (por defecto 1)
 import http from 'k6/http';
 import { check, sleep } from 'k6';
@@ -11,6 +11,8 @@ const BASE = __ENV.BASE_URL;
 const AMOUNT = Number(__ENV.AMOUNT || 1);
 const accepted = new Counter('transfers_accepted');
 const finished = new Counter('transfers_finished');
+// Estados finales de la Saga que devuelve /api/transfers/{correlationId} (estado interno de Transaction).
+const FINAL = ['COMPLETED', 'FAILED', 'COMPENSATED'];
 
 const PROFILES = {
   // 1 transferencia/s durante 30 s: valida que todo está bien conectado
@@ -51,11 +53,11 @@ export const options = {
 };
 
 export function setup() {
-  for (const v of ['BASE_URL', 'EMAIL', 'PASSWORD', 'SOURCE_ACCOUNT', 'TARGET_ACCOUNT']) {
+  for (const v of ['BASE_URL', 'USERNAME', 'PASSWORD', 'SOURCE_ACCOUNT', 'TARGET_ACCOUNT']) {
     if (!__ENV[v]) throw new Error(`Falta la variable ${v}`);
   }
   const res = http.post(`${BASE}/api/customers/login`,
-    JSON.stringify({ email: __ENV.EMAIL, password: __ENV.PASSWORD }),
+    JSON.stringify({ username: __ENV.USERNAME, password: __ENV.PASSWORD }),
     { headers: { 'Content-Type': 'application/json' } });
   const body = res.json();
   const token = body.accessToken || body.token || body.jwt || body.access_token;
@@ -77,14 +79,14 @@ export default function (data) {
   if (!ok) return;
   accepted.add(1);
 
-  // 1 de cada 5: consulta el estado final de la Saga (APPROVED/FAILED), esperando hasta 15 s
+  // 1 de cada 5: consulta el estado final de la Saga (COMPLETED/FAILED/COMPENSATED), esperando hasta 15 s
   if (__ITER % 5 === 0) {
     const id = res.json().correlationId;
     for (let i = 0; i < 15; i++) {
       sleep(1);
       const st = http.get(`${BASE}/api/transfers/${id}`, { headers, tags: { name: 'transfer_status' } });
       const status = st.status === 200 ? st.json().status : null;
-      if (status && status !== 'PENDING') { finished.add(1); break; }
+      if (FINAL.includes(status)) { finished.add(1); break; }
     }
   }
 }
