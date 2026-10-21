@@ -99,6 +99,8 @@ export class TypeOrmTransactionRepository
     entity.amount = transaction.amount.toString();
     entity.status = transaction.status;
     entity.failureReason = transaction.failureReason;
+    entity.destinationBankCode = transaction.destinationBankCode;
+    entity.interbankState = transaction.interbankState;
     entity.correlationId = transaction.correlationId;
     entity.createdAt = transaction.createdAt;
     entity.updatedAt = transaction.updatedAt;
@@ -119,6 +121,8 @@ export class TypeOrmTransactionRepository
       entity.createdAt,
       entity.updatedAt,
       entity.failureReason ?? null,
+      entity.destinationBankCode ?? null,
+      entity.interbankState ?? null,
     );
   }
 }

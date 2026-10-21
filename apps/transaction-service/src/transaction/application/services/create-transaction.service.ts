@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import { Transaction } from '../../domain/entities/transaction.entity';
 import { TransactionStatus } from '../../domain/enums/transaction-status.enum';
+import { InterbankState } from '../../domain/enums/interbank-state.enum';
 import { TransactionRepository } from '../ports/transaction.repository';
 
 export interface CreateTransactionCommand {
@@ -9,6 +10,8 @@ export interface CreateTransactionCommand {
   targetAccount: string;
   amount: number;
   correlationId: string;
+  // Depósito interbancario: banco destino (BANKnn); targetAccount es la cuenta en ese banco.
+  destinationBankCode?: string;
 }
 
 @Injectable()
@@ -40,6 +43,11 @@ export class CreateTransactionService {
       command.correlationId,
       now,
       now,
+      null,
+      command.destinationBankCode ?? null,
+      command.destinationBankCode
+        ? InterbankState.PENDING
+        : null,
     );
 
     await this.transactionRepository.save(transaction);

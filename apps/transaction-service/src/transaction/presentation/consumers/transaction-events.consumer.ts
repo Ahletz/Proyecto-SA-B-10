@@ -12,6 +12,7 @@ import { UpdateTransactionStateService } from '../../application/services/update
 import { CustomerKycService } from '../../application/services/customer-kyc.service';
 import { Transaction } from '../../domain/entities/transaction.entity';
 import { TransactionStatus } from '../../domain/enums/transaction-status.enum';
+import { InterbankState } from '../../domain/enums/interbank-state.enum';
 import { RabbitMqService } from '../../infrastructure/messaging/rabbitmq.service';
 import { TransactionEventPublisher } from '../../infrastructure/messaging/transaction-event.publisher';
 import { EventIdempotencyService } from '../../infrastructure/messaging/event-idempotency.service';
@@ -29,6 +30,24 @@ interface TransactionReferencePayload {
   reason?: string;
 }
 
+// Fase 3: lo publica el Gateway (POST /api/interbank-transfers).
+interface InterbankRequestedPayload {
+  sourceAccount: string;
+  destinationBankCode: string;
+  destinationAccount: string;
+  amount: number;
+  description?: string;
+  requestedBy?: string;
+}
+
+// Eventos de Payment y Account del depósito saliente
+// (docs/interbank/diseno-interbancario.md §4).
+interface InterbankResultPayload {
+  transactionId: string;
+  reason?: string;
+  reasonCode?: string;
+}
+
 // Contrato Fase 2 (sección 2.2): lo publica Customer Service.
 interface KycStatusChangedPayload {
   customerId: string;
@@ -39,9 +58,36 @@ interface KycStatusChangedPayload {
 type TransactionEventPayload =
   | TransferRequestedPayload
   | TransactionReferencePayload
-  | KycStatusChangedPayload;
+  | KycStatusChangedPayload
+  | InterbankRequestedPayload
+  | InterbankResultPayload;
 
 export const KYC_NOT_VERIFIED = 'KYC_NOT_VERIFIED';
+export const AMOUNT_LIMIT_EXCEEDED = 'AMOUNT_LIMIT_EXCEEDED';
+
+const BANK_CODE = /^BANK[0-9]{2}$/;
+const EXTERNAL_ACCOUNT = /^[A-Za-z0-9-]{1,34}$/;
+
+/** Monto máximo por depósito interbancario (contrato: Q10,000.00), configurable. */
+export function interbankMaxAmount(): number {
+  const value = Number(process.env.INTERBANK_MAX_AMOUNT);
+  return Number.isFinite(value) && value > 0 ? value : 10000;
+}
+
+/**
+ * Motivo de rechazo del banco pareja o de Payment, con prefijo INTERBANK_
+ * para distinguirlo en el historial (igual que PAYMENT_ en la Saga interna).
+ */
+export function toInterbankFailureReason(
+  payload: InterbankResultPayload,
+): string {
+  const reason =
+    payload.reasonCode ?? payload.reason ?? 'REJECTED';
+
+  return reason.startsWith('INTERBANK_')
+    ? reason
+    : `INTERBANK_${reason}`;
+}
 
 /**
  * Payment manda motivos propios (TIMEOUT, EXTERNAL_FAILURE, ...).
@@ -105,6 +151,17 @@ export class TransactionEventsConsumer
         'account.funds.released',
 
         'customer.kyc.status.changed',
+
+        'transaction.interbank.requested',
+        'account.interbank.funds.reserved',
+        'account.interbank.funds.rejected',
+        'interbank.transfer.sent',
+        'interbank.transfer.timeout',
+        'interbank.transfer.accepted',
+        'interbank.transfer.rejected',
+        'interbank.transfer.reversed',
+        'account.interbank.transfer.completed',
+        'account.interbank.funds.released',
       ],
       async (message) => {
         await this.handleMessage(message);
@@ -194,6 +251,68 @@ export class TransactionEventsConsumer
         );
         break;
 
+      case 'transaction.interbank.requested':
+        await this.handleInterbankRequested(
+          event as BankEvent<InterbankRequestedPayload>,
+        );
+        break;
+
+      case 'account.interbank.funds.reserved':
+        await this.handleFundsReserved(
+          event as BankEvent<TransactionReferencePayload>,
+        );
+        break;
+
+      case 'account.interbank.funds.rejected':
+      case 'interbank.transfer.rejected':
+        await this.handleInterbankAdvance(
+          event as BankEvent<InterbankResultPayload>,
+          InterbankState.REJECTED,
+        );
+        break;
+
+      case 'interbank.transfer.sent':
+        await this.handleInterbankAdvance(
+          event as BankEvent<InterbankResultPayload>,
+          InterbankState.SENT,
+        );
+        break;
+
+      case 'interbank.transfer.timeout':
+        await this.handleInterbankAdvance(
+          event as BankEvent<InterbankResultPayload>,
+          InterbankState.TIMEOUT,
+        );
+        break;
+
+      case 'interbank.transfer.accepted':
+        await this.handleInterbankAdvance(
+          event as BankEvent<InterbankResultPayload>,
+          InterbankState.ACCEPTED,
+        );
+        break;
+
+      case 'interbank.transfer.reversed':
+        await this.handleInterbankAdvance(
+          event as BankEvent<InterbankResultPayload>,
+          InterbankState.REVERSED,
+        );
+        break;
+
+      case 'account.interbank.transfer.completed':
+        await this.handleInterbankSettled(
+          event as BankEvent<InterbankResultPayload>,
+          TransactionStatus.COMPLETED,
+        );
+        break;
+
+      case 'account.interbank.funds.released':
+        await this.handleInterbankSettled(
+          event as BankEvent<InterbankResultPayload>,
+          TransactionStatus.COMPENSATED,
+        );
+        break;
+
       default:
         throw new Error(
           `Unsupported event: ${event.eventType}`,
@@ -276,6 +395,188 @@ export class TransactionEventsConsumer
     this.logger.log(
       `Transaction ${transaction.transactionId} created`,
     );
+  }
+
+  /**
+   * Inicio del depósito interbancario saliente. Las reglas de negocio
+   * (KYC, monto máximo) fallan la Saga con transaction.failed; Account
+   * valida después fondos, estado de la cuenta y límite otra vez.
+   */
+  private async handleInterbankRequested(
+    event: BankEvent<InterbankRequestedPayload>,
+  ): Promise<void> {
+    this.validateInterbankRequested(event);
+
+    const transaction =
+      await this.createTransactionService
+        .execute({
+          sourceAccount:
+            event.payload.sourceAccount,
+
+          targetAccount:
+            event.payload.destinationAccount,
+
+          amount:
+            event.payload.amount,
+
+          correlationId:
+            event.correlationId,
+
+          destinationBankCode:
+            event.payload.destinationBankCode,
+        });
+
+    if (
+      transaction.status !==
+        TransactionStatus.PENDING ||
+      transaction.interbankState !==
+        InterbankState.PENDING
+    ) {
+      this.logger.warn(
+        `Interbank transaction ${transaction.transactionId} ` +
+          `already ${transaction.status}, skipping`,
+      );
+
+      return;
+    }
+
+    const kycVerified =
+      await this.customerKycService.isVerified(
+        event.payload.requestedBy,
+      );
+
+    const reason = !kycVerified
+      ? KYC_NOT_VERIFIED
+      : event.payload.amount > interbankMaxAmount()
+        ? AMOUNT_LIMIT_EXCEEDED
+        : null;
+
+    if (reason) {
+      const { transaction: failed } =
+        await this.updateTransactionStateService
+          .advanceInterbank(
+            transaction.transactionId,
+            InterbankState.REJECTED,
+            reason,
+          );
+
+      await this.transactionEventPublisher
+        .publishTransactionFailed(
+          failed,
+          reason,
+          event.eventId,
+        );
+
+      this.logger.warn(
+        `Interbank transaction ${transaction.transactionId} ` +
+          `FAILED: ${reason}`,
+      );
+
+      return;
+    }
+
+    await this.transactionEventPublisher
+      .publishInterbankTransferRequested(
+        transaction,
+        event.payload.description,
+        event.eventId,
+      );
+
+    this.logger.log(
+      `Interbank transaction ${transaction.transactionId} ` +
+        `requested to ${transaction.destinationBankCode}`,
+    );
+  }
+
+  private async handleInterbankAdvance(
+    event: BankEvent<InterbankResultPayload>,
+    state: InterbankState,
+  ): Promise<void> {
+    this.validateTransactionReference(event);
+
+    const reason =
+      state === InterbankState.REJECTED ||
+      state === InterbankState.REVERSED
+        ? toInterbankFailureReason(event.payload)
+        : undefined;
+
+    const { transaction, changed } =
+      await this.updateTransactionStateService
+        .advanceInterbank(
+          event.payload.transactionId,
+          state,
+          reason,
+        );
+
+    if (!changed) {
+      this.logger.warn(
+        `Stale ${event.eventType} ignored: ` +
+          `transaction ${transaction.transactionId} ` +
+          `is already ${transaction.interbankState} ` +
+          `[eventId=${event.eventId}]`,
+      );
+
+      return;
+    }
+
+    // Rechazado antes de reservar: no hay nada que compensar.
+    if (
+      transaction.status ===
+      TransactionStatus.FAILED
+    ) {
+      await this.transactionEventPublisher
+        .publishTransactionFailed(
+          transaction,
+          transaction.failureReason ?? 'INTERBANK_REJECTED',
+          event.eventId,
+        );
+    }
+
+    this.logger.log(
+      `Interbank transaction ${transaction.transactionId} ` +
+        `is ${transaction.interbankState} (${transaction.status})`,
+    );
+  }
+
+  private async handleInterbankSettled(
+    event: BankEvent<InterbankResultPayload>,
+    status:
+      | TransactionStatus.COMPLETED
+      | TransactionStatus.COMPENSATED,
+  ): Promise<void> {
+    this.validateTransactionReference(event);
+
+    const { transaction, changed } =
+      await this.updateTransactionStateService
+        .settleInterbank(
+          event.payload.transactionId,
+          status,
+        );
+
+    if (!changed) {
+      this.logger.warn(
+        `Stale ${event.eventType} ignored: ` +
+          `transaction ${transaction.transactionId} ` +
+          `is already ${transaction.status} ` +
+          `[eventId=${event.eventId}]`,
+      );
+
+      return;
+    }
+
+    if (status === TransactionStatus.COMPLETED) {
+      await this.transactionEventPublisher
+        .publishTransactionCompleted(
+          transaction,
+          event.eventId,
+        );
+    } else {
+      await this.transactionEventPublisher
+        .publishTransactionCompensated(
+          transaction,
+          event.eventId,
+        );
+    }
   }
 
   private async handleKycStatusChanged(
@@ -563,6 +864,39 @@ export class TransactionEventsConsumer
     ) {
       throw new Error(
         'amount must be greater than zero',
+      );
+    }
+  }
+
+  private validateInterbankRequested(
+    event: BankEvent<InterbankRequestedPayload>,
+  ): void {
+    const p = event.payload;
+
+    if (!p.sourceAccount) {
+      throw new Error(
+        'sourceAccount is required',
+      );
+    }
+
+    if (!BANK_CODE.test(p.destinationBankCode ?? '')) {
+      throw new Error(
+        'destinationBankCode must match BANKnn',
+      );
+    }
+
+    if (!EXTERNAL_ACCOUNT.test(p.destinationAccount ?? '')) {
+      throw new Error(
+        'destinationAccount is invalid',
+      );
+    }
+
+    if (
+      typeof p.amount !== 'number' ||
+      p.amount < 0.01
+    ) {
+      throw new Error(
+        'amount must be at least 0.01',
       );
     }
   }
