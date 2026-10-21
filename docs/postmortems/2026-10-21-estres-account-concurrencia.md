@@ -49,7 +49,7 @@ Se mitigó bajando el máximo del HPA a 2 réplicas, se corrigió en `v0.5.3` (P
   - `kube_horizontalpodautoscaler_status_current_replicas`, con un máximo de 5;
   - `rabbitmq_detailed_queue_messages_ready{queue=~"account-service.*"}`, con un máximo de 1696 en la cola y 1294 en la DLQ.
 - Capturas pendientes de Grafana para la ventana 05:40–06:30: dashboards *Bank USAC - SLO Account y Payment* y *Bank USAC - Infraestructura, HPA y broker*.
-- Loki: `{service_name="account-service"} |= "retry"` en la ventana muestra los reintentos y el envío a la DLQ. `{service_name=~"account-service|transaction-service"} |= "too many clients"` muestra el agotamiento de conexiones.
+- Logs: los reintentos, el envío a la DLQ, los deadlocks (`40P01`) y el `too many clients` se leyeron con `kubectl -n prod logs` de Account y Transaction. En esa ventana **Loki no recibía logs**: nada los recogía de los contenedores. Se corrigió con el DaemonSet `otel-logs-agent` (PR #57, `v0.5.5`); desde entonces la misma búsqueda es `{service_name="account-service"} | json | level="WARN"`.
 - Reproducción (PR #51): 200 transferencias concurrentes A↔B contra Postgres 17.
 
   | Código | Total final | Deadlocks | Sagas completas |

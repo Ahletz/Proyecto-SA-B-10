@@ -48,9 +48,9 @@ Con carga nominal (5 transferencias/s), se degradó el procesador externo de Pay
   - `transaction.saga.start` → `payment.process` → `publish payment.rejected` → `transaction.saga.compensate` (`bank.transaction.state` COMPENSATING → COMPENSATED, `failure_reason` `PAYMENT_EXTERNAL_FAILURE`, estado público `FAILED`).
   - La traza también muestra eventos desordenados entre réplicas de Transaction: `payment.rejected` llegó antes que `account.funds.reserved` y falló con `Expected transaction status PROCESSING, current status is PENDING`. El reintento de 3 s lo resolvió y la compensación terminó bien.
   - Búsqueda: `{ resource.service.name = "transaction-service" && name = "transaction.saga.compensate" }`.
-- **Loki:**
-  - `{service_name="payment-service"} | json | event=~"payment.simulation.(changed|reset)"` muestra la inyección y la recuperación.
-  - `{service_name=~"payment-service|transaction-service"} | json | traceId="006ce85890f4d9e08197a422bfe7d75d"` muestra los logs de la Saga con el mismo `traceId`.
+- **Logs:** la inyección y la recuperación (`event` `payment.simulation.changed` y `payment.simulation.reset`) y los logs de la Saga con el `traceId` de arriba se leyeron con `kubectl -n prod logs`. En esa ventana **Loki no recibía logs**; se corrigió con el DaemonSet `otel-logs-agent` (PR #57, `v0.5.5`). Desde entonces las mismas búsquedas son:
+  - `{service_name="payment-service"} | json | event=~"payment.simulation.(changed|reset)"`;
+  - `{service_name=~"payment-service|transaction-service"} | json | traceId="<traceId>"`.
 - **Saldos** por el Gateway (`GET /api/accounts/{id}`) antes y después: Q4796 + Q289 y Q4783 + Q302, ambos con total Q5085.
 
 ## Causa raíz
