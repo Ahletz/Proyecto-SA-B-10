@@ -16,8 +16,10 @@
 - `eventId`: identidad del mensaje lógico para idempotencia.
 - `eventType`: también se usa como routing key.
 - `correlationId`: se conserva durante toda una operación distribuida. Lo fija el Gateway a partir del header `X-Correlation-Id` (solo si es un UUID; si no, genera uno), así que en una transferencia es el mismo id desde el request HTTP hasta la auditoría.
-- `causationId` (opcional, Fase 2): `eventId` del evento que provocó este. Lo envían Transaction (en todos sus eventos) y Notification (en `notification.classified`).
+- `causationId` (opcional): `eventId` del evento que provocó este. Lo envían Transaction (en todos sus eventos) y Notification (en `notification.classified`).
 - `version`: permite evolución del contrato.
+
+**Contexto de traza:** además del envelope, cada mensaje lleva en sus **headers AMQP** el `traceparent` (W3C Trace Context) del span que lo publicó. El consumidor continúa esa traza, así que una transferencia completa queda en una sola traza de Tempo aunque cruce RabbitMQ. El `correlationId` también va como atributo `bank.correlation_id` de los spans.
 
 ## Eventos de Customer
 | Evento | Productor | Payload relevante | Consumidor |
@@ -46,8 +48,18 @@
 | `transaction.completed` | Transaction | Notification/Audit | estado terminal exitoso |
 | `transaction.failed` | Transaction | Notification/Audit | estado terminal fallido |
 | `transaction.compensated` | Transaction | Notification/Audit | estado terminal compensado |
-| `transaction.status.changed` | Transaction | Notification/Audit | cambio del estado público (Fase 2) |
+| `transaction.status.changed` | Transaction | Notification/Audit | cambio del estado público |
 | `notification.classified` | Notification/Audit | ninguno por ahora | severidad asignada a un evento auditado (Fase 2) |
+
+### Depósitos interbancarios
+
+| Evento | Productor | Consumidores principales | Propósito |
+|---|---|---|---|
+| `transaction.interbank.requested` | Gateway | Transaction, Notification/Audit | comando inicial de un depósito a otro banco |
+| `interbank.transfer.requested` | Transaction | Account | pide reservar monto + comisión; `interbankTransferId` = `transactionId` |
+| `account.interbank.*`, `interbank.transfer.*`, `interbank.deposit.*`, `interbank.reversal.*` | Account / Payment | Transaction, Account, Payment | avance del depósito saliente o entrante frente al banco pareja |
+
+Los payloads y el flujo completo están en el [diseño interbancario](../interbank/diseno-interbancario.md) y en la [Saga del depósito interbancario](../03-saga/02-deposito-interbancario.md).
 
 Payloads de la Saga:
 
@@ -55,6 +67,7 @@ Payloads de la Saga:
 |---|---|
 | `account.created` | accountId, customerId, type (`MONETARY` o `SAVINGS`), balance, minBalance, feeAmount (null si no hay comisión), status |
 | `transaction.transfer.requested` | sourceAccount, targetAccount, amount, requestedBy (customerId del JWT), requestedEmail |
+| `transaction.interbank.requested` | sourceAccount, destinationBankCode (`BANKnn`), destinationAccount, amount, description (opcional), requestedBy (customerId del JWT) |
 | `transaction.created` | transactionId, sourceAccount, targetAccount, amount, status |
 | `account.funds.rejected`, `payment.rejected`, `account.transfer.failed` | transactionId, reason |
 | `transaction.completed`, `transaction.failed`, `transaction.compensated` | transactionId, status, reason (solo en fallos) |
@@ -74,7 +87,7 @@ Tipos de cuenta (decisión de Fase 2): el contrato usa los mismos valores que la
 
 Transaction guarda el motivo en `failure_reason` y lo expone en el historial. Los motivos de Payment se guardan con prefijo `PAYMENT_` (`PAYMENT_TIMEOUT`, `PAYMENT_EXTERNAL_FAILURE`, …) para distinguir qué participante falló.
 
-### `transaction.status.changed` (Fase 2)
+### `transaction.status.changed`
 Se publica junto con `transaction.created`, `transaction.completed`, `transaction.failed` y `transaction.compensated`, es decir, cada vez que cambia el estado público de la transacción.
 
 | Campo del payload | Descripción |

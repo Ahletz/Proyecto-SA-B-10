@@ -1,5 +1,5 @@
 ---
-title: Modelo de datos — una base por microservicio (Fase 2)
+title: Modelo de datos — una base por microservicio
 ---
 erDiagram
     direction LR
@@ -50,7 +50,22 @@ erDiagram
         uuid correlation_id
         timestamptz processed_at
     }
+    INTERBANK_OPERATIONS["bank_account · interbank_operations"] {
+        uuid interbank_transfer_id PK "= transactionId en un saliente"
+        varchar direction "OUT · IN"
+        varchar account_id "cuenta propia (sin FK)"
+        varchar partner_bank_code "BANKnn"
+        numeric amount
+        numeric fee_amount
+        varchar status "RESERVED · DEBITED · RELEASED · CREDITED · REJECTED · CANCELLED · REFUNDED"
+        varchar reason_code
+        varchar transaction_id
+        varchar reversal_id
+        timestamptz created_at
+        timestamptz updated_at
+    }
     ACCOUNTS ||..o{ TRANSFER_RESERVATIONS : "source_account / target_account (sin FK)"
+    ACCOUNTS ||..o{ INTERBANK_OPERATIONS : "account_id (sin FK)"
 
     %% bank_transaction — Transaction Service (TypeORM)
     TRANSACTIONS["bank_transaction · transactions"] {
@@ -59,7 +74,9 @@ erDiagram
         varchar target_account "id de Account (sin FK)"
         numeric amount
         varchar status "PENDING · PROCESSING · COMPLETED · FAILED · COMPENSATING · COMPENSATED"
-        varchar failure_reason "KYC_NOT_VERIFIED · INSUFFICIENT_FUNDS · PAYMENT_*"
+        varchar failure_reason "KYC_NOT_VERIFIED · INSUFFICIENT_FUNDS · PAYMENT_* · INTERBANK_*"
+        varchar destination_bank_code "BANKnn; vacío si es interna"
+        varchar interbank_state "PENDING · SENT · TIMEOUT · ACCEPTED · REJECTED · REVERSED"
         uuid correlation_id UK
         timestamptz created_at
         timestamptz updated_at
@@ -86,6 +103,34 @@ erDiagram
         uuid correlation_id
         timestamptz created_at
     }
+    INTERBANK_TRANSFERS["bank_payment · interbank_transfers"] {
+        uuid interbank_transfer_id PK "Idempotency-Key del contrato"
+        varchar direction "OUT · IN"
+        varchar partner_bank_code
+        varchar origin_account
+        varchar destination_account
+        numeric amount
+        varchar state "PENDING · SENT · TIMEOUT · ACCEPTED · REJECTED · REVERSED …"
+        varchar request_hash "detecta el mismo id con otro contenido (409)"
+        timestamptz expires_at "createdAt + 180 s"
+        varchar timeout_step "QUERY · CANCEL"
+        varchar callback_state "PENDING · DELIVERED · FAILED"
+        uuid transaction_id
+        uuid correlation_id
+        timestamptz created_at
+    }
+    INTERBANK_REVERSALS["bank_payment · interbank_reversals"] {
+        uuid reversal_id PK
+        varchar direction "OUT · IN"
+        uuid original_transfer_id "sin FK"
+        varchar partner_bank_code
+        numeric amount
+        varchar state
+        uuid refund_transfer_id
+        uuid correlation_id
+        timestamptz created_at
+    }
+    INTERBANK_TRANSFERS ||..o{ INTERBANK_REVERSALS : "original_transfer_id (sin FK)"
     PAYMENT_PROCESSED_EVENTS["bank_payment · processed_events"] {
         uuid event_id PK
         varchar event_type

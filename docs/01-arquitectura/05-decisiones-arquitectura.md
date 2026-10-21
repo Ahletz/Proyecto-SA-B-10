@@ -38,7 +38,7 @@ Las bases se ejecutan fuera del cluster para cumplir el enunciado. Los pods alca
 ## ADR-008 - MailHog para demostración
 El correo se envía por SMTP real hacia MailHog en desarrollo. Esto permite demostrar activación sin depender de credenciales de un proveedor externo.
 
-## Decisiones de Fase 2 (nube, CI/CD e infraestructura)
+## Decisiones de nube, CI/CD e infraestructura
 
 ## ADR-009 - Google Cloud Platform como proveedor
 **Decisión:** desplegar producción en GCP (región `us-central1`).
@@ -55,9 +55,9 @@ El correo se envía por SMTP real hacia MailHog en desarrollo. Esto permite demo
 **Coste / alternativas:** GitLab CI o Jenkins exigían migrar el repositorio o mantener un servidor. Artifact Registry de GCP sería más cercano a GKE, pero obligaría a dar credenciales de GCP a todos los workflows de CI; con GHCR, GKE descarga las imágenes con un token de solo lectura (`GHCR_PULL_TOKEN`). Los minutos de Actions son limitados: se mitiga con el build selectivo (ADR-013).
 
 ## ADR-011 - GKE Standard zonal en la misma VPC que las bases de datos
-**Decisión:** cluster `bank-usac-gke` Standard zonal (`us-central1-a`), VPC-native en `bank-usac-vpc`, node pool `e2-medium` con autoscaler de 1 a 3 nodos (`infrastructure/terraform/gke.tf`).
+**Decisión:** cluster `bank-usac-gke` Standard zonal (`us-central1-a`), VPC-native en `bank-usac-vpc`, node pool `e2-standard-2` con autoscaler de 2 a 4 nodos (`infrastructure/terraform/gke.tf`). Se amplió desde `e2-medium` de 1 a 3 nodos al sumar el stack de observabilidad en el mismo cluster.
 
-**Ventajas:** el peering de Cloud SQL **no es transitivo**: un cluster en otra VPC no llegaría a las IP privadas de las bases. En la misma VPC, los pods (rango `gke-pods`) alcanzan Cloud SQL sin exponerlo a Internet. El autoscaler de nodos complementa al HPA (80 % CPU, hasta 5 réplicas por servicio).
+**Ventajas:** el peering de Cloud SQL **no es transitivo**: un cluster en otra VPC no llegaría a las IP privadas de las bases. En la misma VPC, los pods (rango `gke-pods`) alcanzan Cloud SQL sin exponerlo a Internet. El autoscaler de nodos complementa al HPA (80 % CPU, hasta 5 réplicas por microservicio y 3 del Gateway).
 
 **Coste / alternativas:** un cluster zonal no es tolerante a la caída de la zona; uno regional triplica los nodos y el costo. Autopilot cobra por pod y restringe algunos ajustes (tipos de nodo, `metrics-server` propio). Para un proyecto académico con demo en una sola zona, zonal es suficiente.
 
@@ -87,4 +87,4 @@ El correo se envía por SMTP real hacia MailHog en desarrollo. Esto permite demo
 
 **Ventajas:** Cloud Run es un servicio de despliegue rápido: HTTPS y dominio propios, escala a cero y cada despliegue crea una revisión nueva que recibe el tráfico cuando está lista (sin downtime y con rollback por revisión). El proxy deja la API en el mismo origen, así el navegador no bloquea llamadas HTTP desde una página HTTPS (contenido mixto) y no depende de CORS. La imagen no lleva compilada la IP del Gateway: el pipeline la lee del LoadBalancer en cada despliegue, así que la misma imagen probada en la release llega a producción.
 
-**Coste / alternativas:** una VM de Compute Engine con el contenedor evita Artifact Registry, pero hay que mantener el sistema operativo, abrir SSH al pipeline y resolver HTTPS a mano. Cloud Run no descarga de GHCR, por eso la imagen se copia a Artifact Registry (mismo tag, sin recompilar). El tramo de Cloud Run al Gateway es HTTP por la IP pública del LoadBalancer; para un entorno real se usaría un Ingress con certificado.
+**Coste / alternativas:** una VM de Compute Engine con el contenedor evita Artifact Registry, pero hay que mantener el sistema operativo, abrir SSH al pipeline y resolver HTTPS a mano. Cloud Run no descarga de GHCR, por eso la imagen se copia a Artifact Registry (mismo tag, sin recompilar). El tramo de Cloud Run al Gateway es HTTP por la IP pública del LoadBalancer; para un entorno real se usaría un Ingress con certificado, como el que ya expone `/interbank/v1` al banco pareja (`gateway-ingress.yaml`, `ManagedCertificate`).

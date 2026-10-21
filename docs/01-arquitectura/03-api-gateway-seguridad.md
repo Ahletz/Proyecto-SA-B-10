@@ -7,7 +7,8 @@ El API Gateway NestJS es el único endpoint público del backend. Sus responsabi
 - enrutar request/response hacia el servicio propietario;
 - restringir ownership de cuentas para `CLIENT`;
 - generar `correlationId` para transferencias;
-- publicar `transaction.transfer.requested` en RabbitMQ;
+- publicar `transaction.transfer.requested` y `transaction.interbank.requested` en RabbitMQ;
+- exponer el contrato interbancario `/interbank/v1/*` al banco pareja, autenticado con `X-Api-Key`;
 - exponer health/readiness agregada.
 
 No realiza validación de fondos, reservas, pagos, débito/crédito ni transiciones de Saga.
@@ -29,20 +30,21 @@ El Gateway verifica el token con `JwtGuard` y los permisos con `RolesGuard`.
 | Registro/activación/login | público | público | público |
 | Perfil propio | sí | sí | sí |
 | Crear/consultar cuentas | propias | sí | sí |
-| Iniciar transferencia | sí | no | no |
+| Iniciar transferencia o depósito a otro banco | sí | no | no |
 | Consultar pagos | no | sí | sí |
 | Consultar auditoría | no | no | sí |
+| Inyectar fallos en Payment (`/api/admin/payment-simulation`) | no | no | sí |
 | Mantenimiento de cuentas inactivas | no | sí | sí |
 
 ## Protección de ownership
 En cuentas, un `CLIENT` no puede elegir arbitrariamente `customerId`; el Gateway fuerza el `customerId` contenido en el JWT. Para una transferencia, el Gateway consulta la cuenta origen y rechaza la solicitud si no pertenece al cliente autenticado.
 
 ## Seguridad interna en Kubernetes
-Los cinco servicios se exponen como `ClusterIP`; solo Frontend y Gateway usan `NodePort`. La `NetworkPolicy` de backend permite ingress desde el Gateway y RabbitMQ.
+Los cinco microservicios y el simulador se exponen como `ClusterIP`. En producción el Gateway es la única entrada: un Service `LoadBalancer` para el proxy `/api` del frontend y un Ingress **solo HTTPS** para el banco pareja. En kind local, Frontend y Gateway usan `NodePort` y la `NetworkPolicy` de backend permite ingress solo desde el Gateway y RabbitMQ ([NetworkPolicy](../04-despliegue/03-network-policy.md)).
 
 ![Flujo de autenticación](../assets/diagramas/auth-security-flow.png)
 
-## Fase 3: rutas nuevas
+## Rutas interbancarias y de administración
 
 | Ruta | Autenticación | Rol | Destino | Notas |
 |---|---|---|---|---|
@@ -63,7 +65,7 @@ Los cinco servicios se exponen como `ClusterIP`; solo Frontend y Gateway usan `N
 
 ### Resiliencia del Gateway
 
-- Toda llamada a un servicio interno se corta a los 5 s (`PROXY_TIMEOUT_MS`). Si el servicio no responde, el Gateway devuelve **503** en vez de dejar la petición colgada (hallazgo del escenario 3, [escenarios de fallo](../pruebas/escenarios-de-fallo.md)).
+- Toda llamada a un servicio interno se corta a los 5 s (`PROXY_TIMEOUT_MS`). Si el servicio no responde, el Gateway devuelve **503** en vez de dejar la petición colgada (hallazgo del escenario 3, [postmortem](../postmortems/2026-10-21-escenario3-account-caido.md)).
 - HPA de 1 a 3 réplicas al 80 % de CPU, con sondas de 3 s de timeout (hallazgo de la prueba de estrés).
 - Instrumentado con OpenTelemetry:
   - span HTTP por petición con el atributo `bank.correlation_id`;

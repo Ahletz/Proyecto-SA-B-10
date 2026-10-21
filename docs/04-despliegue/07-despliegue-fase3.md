@@ -1,6 +1,14 @@
-# 7. Despliegue Fase 3 (producción)
+# 7. Despliegue
 
-Extiende el [despliegue de la Fase 2](../architecture/deployment.md) con el stack de observabilidad, la entrada HTTPS para el banco pareja y el simulador interbancario. Todo sigue llegando por pipeline. Las únicas excepciones manuales son los Secrets, que se crean fuera del repositorio y se listan abajo.
+Dónde corre cada parte de Bank USAC en los dos entornos: desarrollo (Kubernetes efímero con kind) y producción (GCP). El paso de uno a otro es solo por pipeline ([CI/CD](04-ci-cd.md)) y la infraestructura de producción la crea [Terraform](05-terraform-cloud-sql.md). Las únicas excepciones manuales son los Secrets, que se crean fuera del repositorio y se listan abajo.
+
+## Entorno de desarrollo
+
+- **Cluster kind.** En el pipeline (`cd-dev.yml` y `release.yml`) se crea un cluster kind efímero en el runner y se despliega `k8s/overlays/dev` en el namespace `dev`, con las imágenes `sha-<commit>` (o las candidatas `vX.Y.Z-rc.<n>`) de GHCR, y se corre el smoke test. En local, `scripts/project/start-k8s.sh` usa el namespace `bank-usac` con imágenes `:local` ([Kubernetes kind](02-kubernetes-kind.md)).
+- **Pods:** API Gateway, Frontend, los cinco microservicios, `interbank-mock`, RabbitMQ y MailHog, con los mismos HPA que en producción.
+- **Bases de datos fuera del cluster:** cinco PostgreSQL en Docker Compose, una por microservicio. Los pods llegan a ellas por la IP del host.
+
+## Entorno de producción
 
 ![Despliegue Fase 3](../assets/diagramas/deployment-fase3.png)
 
@@ -40,3 +48,9 @@ Fuente Mermaid: [`c4-src/deployment-fase3.mmd`](../01-arquitectura/c4-src/deploy
 - Grafana: `kubectl -n observability port-forward svc/grafana 3000:3000`.
 - Simulador: `kubectl -n prod port-forward svc/interbank-mock 3010:3010`. Las rutas `/admin/*` nunca se publican; ver `apps/interbank-mock/README.md`.
 - Salud interbancaria pública: `GET https://35-244-157-47.sslip.io/interbank/v1/health` (sin autenticación).
+
+## Restricciones respetadas
+
+- Ningún microservicio llama a otro directamente: la comunicación entre microservicios pasa por RabbitMQ. El Gateway publica el comando inicial y hace proxy HTTP de consultas; hacia afuera, solo Payment habla con el banco pareja.
+- Las bases de datos viven fuera del cluster en los dos entornos (Docker Compose en desarrollo, Cloud SQL en producción) y cada microservicio accede solo a la suya.
+- Producción no se toca a mano: `cd-prod.yml` despliega la aplicación con imágenes versionadas (nunca `latest`) y `deploy-observability.yml` despliega el stack de observabilidad.
