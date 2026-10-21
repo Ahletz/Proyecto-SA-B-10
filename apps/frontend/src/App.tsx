@@ -12,6 +12,7 @@ import{ActivationPage}from'./pages/ActivationPage';
 import{ProfilePage}from'./pages/ProfilePage';
 import{AccountsPage}from'./pages/AccountsPage';
 import{TransferPage}from'./pages/TransferPage';
+import{InterbankTransferPage}from'./pages/InterbankTransferPage';
 import{TransactionHistoryPage}from'./pages/TransactionHistoryPage';
 import{AuditPage}from'./pages/AuditPage';
 import{PaymentsPage}from'./pages/PaymentsPage';
@@ -72,6 +73,15 @@ export const App=()=>(
           element={
             <ProtectedRoute roles={['CLIENT']}>
               <TransferPage/>
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/interbank"
+          element={
+            <ProtectedRoute roles={['CLIENT']}>
+              <InterbankTransferPage/>
             </ProtectedRoute>
           }
         />
