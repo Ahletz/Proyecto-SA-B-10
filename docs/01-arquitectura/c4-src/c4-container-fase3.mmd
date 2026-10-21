@@ -1,0 +1,67 @@
+---
+title: C4 Nivel 2 — Contenedores de Bank USAC (Fase 3)
+config:
+  layout: elk
+  flowchart:
+    wrappingWidth: 260
+---
+flowchart TB
+    usuarios["👤 Cliente · Cajero · Administrador"]
+    pareja["🏦 Banco pareja BANK13<br>(sistema de otro grupo)<br>contrato OpenAPI del curso"]
+
+    frontend["Frontend<br>React + TypeScript · Cloud Run<br>Transferir, Otro banco (depósitos),<br>historial, correlationId y traceId"]
+
+    subgraph k8s["GKE bank-usac-gke"]
+        subgraph prod["namespace prod"]
+            ingress["Ingress HTTPS + ManagedCertificate<br>35-244-157-47.sslip.io"]
+            gateway["API Gateway · HPA 1–3<br>NestJS :8080<br>JWT, roles, ownership, X-Correlation-Id<br>/interbank/v1 con X-Api-Key<br>/api/admin/payment-simulation"]
+
+            subgraph servicios["Microservicios · HPA 1–5 · pool de BD 4 por réplica"]
+                direction LR
+                customer["Customer<br>Spring Boot :8081"]
+                account["Account<br>NestJS :3004<br>reservas con FOR UPDATE"]
+                transaction["Transaction<br>NestJS :3003<br>Saga interna e interbancaria"]
+                payment["Payment<br>NestJS :3005<br>procesador simulado ·<br>conector interbancario"]
+                notification["Notification & Audit<br>Spring Boot :8082"]
+            end
+
+            rabbit{{"RabbitMQ<br>bank.events · .retry · .dlx<br>métricas :15692"}}
+            mock["interbank-mock BANK99<br>Node :3010<br>accept · reject · no-callback · down"]
+        end
+
+        subgraph obs["namespace observability"]
+            direction LR
+            agent["otel-logs-agent<br>DaemonSet (filelog)"]
+            collector["OTel Collector<br>OTLP :4317/:4318"]
+            tempo[("Tempo<br>trazas")]
+            prom[("Prometheus<br>métricas + reglas de alerta")]
+            loki[("Loki<br>logs")]
+            ksm["kube-state-metrics"]
+            grafana["Grafana<br>dashboards y alertas como código"]
+        end
+    end
+
+    cloudsql[("Cloud SQL ×5<br>PostgreSQL 17, IP privada")]
+
+    usuarios -->|"HTTPS"| frontend
+    frontend -->|"/api (proxy nginx al LoadBalancer :8080)"| gateway
+    pareja -->|"HTTPS /interbank/v1 + X-Api-Key + traceparent"| ingress
+    ingress --> gateway
+    gateway -->|"HTTP de borde"| servicios
+    gateway -->|"transaction.transfer.requested<br>transaction.interbank.requested"| rabbit
+    rabbit <-->|"eventos de la Saga<br>traceparent en headers AMQP"| servicios
+    payment -->|"POST /transfers · consulta · cancelación · callback<br>traceparent"| pareja
+    payment -->|"pruebas y fallos"| mock
+    mock -->|"callback /result por el Gateway"| gateway
+    servicios --> cloudsql
+
+    servicios -. "OTLP trazas y métricas" .-> collector
+    gateway -. "OTLP" .-> collector
+    agent -. "logs JSON de stdout" .-> loki
+    collector --> tempo
+    collector --> prom
+    rabbit -. "scrape" .-> prom
+    ksm -. "HPA, pods" .-> prom
+    grafana --> tempo
+    grafana --> prom
+    grafana --> loki

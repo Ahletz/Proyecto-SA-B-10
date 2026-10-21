@@ -1,0 +1,59 @@
+---
+title: Diagrama de despliegue — Bank USAC (Fase 3, producción)
+config:
+  layout: elk
+  flowchart:
+    wrappingWidth: 260
+---
+flowchart TB
+    cliente["👤 Navegador"]
+    pareja["🏦 Banco pareja BANK13<br>https://angelgonza21.dpdns.org/interbank/v1"]
+
+    subgraph gh["GitHub"]
+        direction TB
+        actions["Actions: CI por integrante · cd-dev (kind) ·<br>release.yml · cd-prod · deploy-observability"]
+        ghcr[("GHCR vX.Y.Z")]
+        actions --> ghcr
+    end
+
+    subgraph gcp["GCP · proyecto elevated-range-509623-j8 · us-central1"]
+        run["Cloud Run<br>bank-usac-frontend<br>nginx + SPA"]
+        ar[("Artifact Registry<br>frontend")]
+        ip["IP global estática 35.244.157.47<br>(Terraform)"]
+        subgraph vpc["VPC bank-usac-vpc"]
+            subgraph gke["GKE bank-usac-gke · e2-standard-2 · 2–4 nodos"]
+                subgraph nsprod["namespace prod"]
+                    ing["«Ingress» gce + ManagedCertificate<br>HTTPS (banco pareja)"]
+                    lb["«Service» LoadBalancer :8080<br>(proxy /api del frontend)"]
+                    gw["«Pods» API Gateway<br>HPA 80 % CPU, máx. 3"]
+                    svc["«Pods» Customer · Account · Transaction ·<br>Payment · Notification & Audit<br>HPA 80 % CPU, máx. 5"]
+                    mq["«Pod» RabbitMQ"]
+                    mock["«Pod» interbank-mock"]
+                    sec[["Secrets: bank-interbank-secret,<br>gateway-interbank-keys, interbank-mock-secret"]]
+                end
+                subgraph nsobs["namespace observability"]
+                    ds["«DaemonSet» otel-logs-agent<br>(1 por nodo)"]
+                    col["«Pod» OTel Collector"]
+                    stack["«Pods» Prometheus · Tempo · Loki ·<br>Grafana · kube-state-metrics"]
+                end
+            end
+            sql[("Cloud SQL ×5 db-f1-micro<br>account · customer · notification ·<br>payment · transaction")]
+        end
+    end
+
+    actions -->|"kubectl apply -k (prod / observability)"| gke
+    actions -->|"gcloud run deploy"| run
+    ghcr --> gke
+    ar --> run
+    cliente -->|"HTTPS"| run
+    run -->|"/api (API_UPSTREAM)"| lb --> gw
+    pareja -->|"HTTPS"| ip
+    ip --> ing --> gw
+    gw --> svc
+    gw --> mq
+    svc --> mq
+    svc -->|"IP privada"| sql
+    svc -->|"HTTPS saliente"| pareja
+    svc -->|"OTLP"| col
+    ds -->|"OTLP logs"| stack
+    col --> stack

@@ -57,4 +57,12 @@ La documentación detallada de los diagramas actualizados se encuentra en:
 
 Fuentes Mermaid: `c4-src/c4-container.mmd`, `c4-src/c4-component-transaction.mmd`, `c4-src/c4-component-account.mmd`, `c4-src/c4-component-payment.mmd`, `c4-src/er-databases.mmd`, `c4-src/deployment.mmd`, `c4-src/sequence-transfer.mmd` y `c4-src/sequence-transfer-failure.mmd`.
 
+## Actualización Fase 3 — Integrante 3
+
+- [C4 Nivel 2 — Contenedores Fase 3](10-c4-contenedores-fase3.md) (`c4-container-fase3.png`): stack de observabilidad, Ingress HTTPS, banco pareja BANK13, simulador BANK99 y agente de logs.
+- [Despliegue Fase 3](../04-despliegue/07-despliegue-fase3.md) (`deployment-fase3.png`): namespaces `prod` y `observability`, Cloud Run, Cloud SQL, IP estática y Secrets.
+- [Depósito interbancario](../03-saga/02-deposito-interbancario.md): `sequence-interbank-outgoing.png` (saliente aceptado), `sequence-interbank-timeout.png` (TIMEOUT → consulta → cancelación → REVERSED) y `sequence-interbank-incoming.png` (entrante con idempotencia).
+
+Fuentes Mermaid: `c4-src/c4-container-fase3.mmd`, `c4-src/deployment-fase3.mmd` y `c4-src/sequence-interbank-{outgoing,timeout,incoming}.mmd`.
+
 Las fuentes Mermaid reproducibles se conservan en `c4-src/`.

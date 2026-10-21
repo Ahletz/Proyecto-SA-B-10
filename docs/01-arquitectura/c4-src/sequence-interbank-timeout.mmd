@@ -1,0 +1,30 @@
+---
+title: Secuencia — Depósito saliente sin respuesta (TIMEOUT → REVERSED) (Fase 3)
+---
+sequenceDiagram
+    autonumber
+    participant T as Transaction
+    participant MQ as RabbitMQ
+    participant A as Account
+    participant P as Payment
+    participant B as Banco pareja
+
+    Note over T,P: Pasos 1–18 iguales al depósito aceptado: reserva hecha,<br/>POST /transfers respondido con 202 y estado SENT
+    B--xP: no llega el callback /result
+    Note over P: worker cada INTERBANK_TICK_MS<br/>detecta now > expiresAt (180 s)
+    P->>MQ: interbank.transfer.timeout
+    MQ->>T: TIMEOUT (la reserva sigue retenida)
+    loop hasta 3 consultas con espera creciente
+        P->>B: GET /transfers/{id}
+        B-->>P: 200 PROCESSING (o 404)
+    end
+    P->>B: POST /transfers/{id}/cancel
+    B-->>P: 200 CANCELLED
+    P->>MQ: interbank.transfer.reversed (reasonCode TIMEOUT)
+    MQ->>T: REVERSED
+    MQ->>A: interbank.transfer.reversed
+    Note over A: libera la reserva
+    A->>MQ: account.interbank.funds.released
+    MQ->>T: COMPENSATED · span transaction.saga.compensate
+
+    Note over P,B: Variantes: GET responde ACCEPTED → confirma el débito.<br/>cancel responde ALREADY_ACCEPTED → confirma y ALREADY_REJECTED → libera.<br/>Sin respuesta: reintenta y solo tras expiresAt + 300 s libera<br/>y registra interbank.partner_unreachable (alerta InterbankPartnerUnreachable).<br/>Medido en prod con el mock en modo no-callback: SENT → TIMEOUT a 181 s → REVERSED a 184 s.
