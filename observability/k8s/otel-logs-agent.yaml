@@ -1,0 +1,129 @@
+# Agente de logs: un Collector por nodo (DaemonSet) que lee los logs de los contenedores de los
+# namespaces de la app (prod y dev) y los envía a Loki por OTLP. Los servicios solo escriben JSON
+# por stdout (docs/observabilidad/convenciones.md §2); sin este agente Loki no recibe nada.
+# Etiquetas en Loki: service_name (= nombre del contenedor), k8s_namespace_name, k8s_pod_name.
+# El cuerpo queda como la línea JSON original (se consulta con `| json`), y traceId/spanId se
+# copian al registro OTLP para saltar de un log a su traza en Tempo.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: otel-logs-agent-config
+data:
+  config.yaml: |
+    receivers:
+      filelog:
+        include:
+          - /var/log/pods/prod_*/*/*.log
+          - /var/log/pods/dev_*/*/*.log
+        start_at: end
+        # El parser `container` saca namespace, pod y contenedor de la ruta del archivo.
+        include_file_path: true
+        storage: file_storage
+        operators:
+          # Formato del runtime (containerd/CRI) y metadatos k8s.* a partir de la ruta del archivo.
+          - type: container
+            id: container-parser
+          - type: json_parser
+            id: app-json
+            if: 'body matches "^\\s*\\{"'
+            parse_to: attributes.log
+            on_error: send_quiet
+          - type: severity_parser
+            if: 'attributes.log != nil and attributes.log.level != nil'
+            parse_from: attributes.log.level
+            on_error: send_quiet
+          - type: trace_parser
+            if: 'attributes.log != nil and attributes.log.traceId != nil and attributes.log.traceId != ""'
+            trace_id:
+              parse_from: attributes.log.traceId
+            span_id:
+              parse_from: attributes.log.spanId
+            on_error: send_quiet
+          - type: copy
+            if: 'attributes.log != nil and attributes.log.correlationId != nil'
+            from: attributes.log.correlationId
+            to: attributes.correlation_id
+          - type: copy
+            if: 'attributes.log != nil and attributes.log.event != nil'
+            from: attributes.log.event
+            to: attributes.event
+          - type: remove
+            if: 'attributes.log != nil'
+            field: attributes.log
+          - type: remove
+            field: attributes["log.file.path"]
+          - type: copy
+            from: resource["k8s.container.name"]
+            to: resource["service.name"]
+          - type: copy
+            from: resource["k8s.namespace.name"]
+            to: resource["deployment.environment"]
+    processors:
+      memory_limiter:
+        check_interval: 1s
+        limit_mib: 150
+        spike_limit_mib: 40
+      batch: {}
+    exporters:
+      otlphttp/loki:
+        endpoint: http://loki.observability.svc.cluster.local:3100/otlp
+    extensions:
+      health_check:
+        endpoint: 0.0.0.0:13133
+      file_storage:
+        directory: /var/lib/otel-logs-agent
+    service:
+      extensions: [health_check, file_storage]
+      pipelines:
+        logs:
+          receivers: [filelog]
+          processors: [memory_limiter, batch]
+          exporters: [otlphttp/loki]
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: otel-logs-agent
+spec:
+  selector:
+    matchLabels:
+      app: otel-logs-agent
+  template:
+    metadata:
+      labels:
+        app: otel-logs-agent
+    spec:
+      containers:
+        - name: otel-logs-agent
+          image: otel/opentelemetry-collector-contrib:0.111.0
+          args: ["--config=/conf/config.yaml"]
+          # Leer /var/log/pods y guardar las posiciones en el nodo requiere root.
+          securityContext:
+            runAsUser: 0
+            runAsGroup: 0
+          ports:
+            - {name: health, containerPort: 13133}
+          readinessProbe:
+            httpGet: {path: /, port: 13133}
+            initialDelaySeconds: 5
+          livenessProbe:
+            httpGet: {path: /, port: 13133}
+            initialDelaySeconds: 15
+          resources:
+            requests: {cpu: 25m, memory: 64Mi}
+            limits: {cpu: 200m, memory: 200Mi}
+          volumeMounts:
+            - {name: config, mountPath: /conf}
+            - {name: varlogpods, mountPath: /var/log/pods, readOnly: true}
+            - {name: state, mountPath: /var/lib/otel-logs-agent}
+      volumes:
+        - name: config
+          configMap:
+            name: otel-logs-agent-config
+        - name: varlogpods
+          hostPath:
+            path: /var/log/pods
+        - name: state
+          hostPath:
+            path: /var/lib/otel-logs-agent
+            type: DirectoryOrCreate

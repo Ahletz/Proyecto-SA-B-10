@@ -61,6 +61,17 @@ La segunda fase amplía la solución con:
 26. [Matriz requisito-evidencia](09-calificacion/01-matriz-requisito-evidencia.md)
 27. [Guion de sustentación](09-calificacion/02-guion-sustentacion.md)
 
+### Fase 3
+
+28. [C4 Nivel 2 — Contenedores Fase 3](01-arquitectura/10-c4-contenedores-fase3.md)
+29. [Despliegue Fase 3](04-despliegue/07-despliegue-fase3.md)
+30. [Saga del depósito interbancario](03-saga/02-deposito-interbancario.md)
+31. [Diseño interbancario](interbank/diseno-interbancario.md) y [acuerdo de integración con BANK13](interbank/acuerdo-integracion.md)
+32. [Convenciones de observabilidad](observabilidad/convenciones.md) y [catálogo de métricas](observabilidad/catalogo-metricas.md)
+33. [Pruebas de carga](pruebas/carga.md) y [escenarios de fallo](pruebas/escenarios-de-fallo.md)
+34. [Postmortems](postmortems/)
+35. Runbooks por alerta: [`observability/runbooks/`](../observability/runbooks/)
+
 ## Diagramas principales
 
 ![C4 contexto](assets/diagramas/c4-context.png)
@@ -68,5 +79,9 @@ La segunda fase amplía la solución con:
 ![C4 contenedores](assets/diagramas/c4-container.png)
 
 ![Despliegue Fase 2](assets/diagramas/deployment-fase2.png)
+
+![C4 contenedores Fase 3](assets/diagramas/c4-container-fase3.png)
+
+![Despliegue Fase 3](assets/diagramas/deployment-fase3.png)
 
 ![Saga](assets/diagramas/saga-success.png)

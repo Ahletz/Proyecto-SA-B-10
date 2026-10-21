@@ -6,6 +6,7 @@ namespace: observability
 resources:
   - k8s/namespace.yaml
   - k8s/otel-collector.yaml
+  - k8s/otel-logs-agent.yaml
   - k8s/prometheus.yaml
   - k8s/kube-state-metrics.yaml
   - k8s/tempo.yaml

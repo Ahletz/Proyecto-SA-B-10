@@ -1,0 +1,26 @@
+---
+title: Secuencia — Depósito interbancario entrante (Fase 3)
+---
+sequenceDiagram
+    autonumber
+    participant B as Banco pareja
+    participant G as API Gateway<br/>(HTTPS 35-244-157-47.sslip.io)
+    participant P as Payment
+    participant MQ as RabbitMQ
+    participant A as Account
+
+    B->>G: POST /interbank/v1/transfers<br/>X-Api-Key · Idempotency-Key · traceparent
+    Note over G: valida X-Api-Key (Secret gateway-interbank-keys)<br/>400 sin traceparent · reescribe X-Caller-Bank-Code
+    G->>P: reenvía a /interbank/v1/transfers
+    Note over P: mismo id y contenido → 200 (sin nuevo crédito)<br/>mismo id, otro contenido → 409 · vencido → 422
+    P-->>G: 202 PROCESSING
+    G-->>B: 202 PROCESSING
+    P->>MQ: interbank.deposit.requested
+    MQ->>A: interbank.deposit.requested
+    Note over A: valida cuenta activa y vigencia<br/>acredita en UNA transacción (idempotente por id)
+    A->>MQ: account.interbank.deposit.credited (o .rejected)
+    MQ->>P: account.interbank.deposit.credited
+    P->>B: POST {pareja}/transfers/{id}/result ACCEPTED · traceparent<br/>(reintentos 2 s, 4 s, 8 s… si falla)
+    B-->>P: 200
+
+    Note over B,A: Un solo traceId en ambos bancos: el traceparent recibido es el padre<br/>de los spans del Gateway, Payment, Account y del callback.
