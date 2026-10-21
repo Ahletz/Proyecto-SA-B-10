@@ -6,7 +6,7 @@ El CI de cada rama `feature/**` compila los servicios y ejecuta sus pruebas unit
 | Servicio | Herramienta | Comando |
 |---|---|---|
 | Customer, Notification & Audit | JUnit (Maven) | `mvn -B clean test` |
-| Account, Payment, Transaction, API Gateway | Vitest | `npm test` |
+| Account, Payment, Transaction, API Gateway, simulador `interbank-mock` | Vitest | `npm test` (incluye la Saga interbancaria, el contrato `/interbank/v1`, las API keys por banco, el 503 rápido del Gateway y los modos del simulador) |
 | Frontend | Vitest | `npm test` (filtros del historial, estados de la Saga, errores HTTP) |
 
 ## E2E happy path
@@ -41,5 +41,11 @@ Valida ADMIN en auditoría, CASHIER en pagos y denegación de auditoría al caje
 Escenarios:
 - fondos insuficientes -> `FAILED`;
 - Payment rechaza después de reserva -> `COMPENSATED` y saldo restaurado.
+
+## Pruebas de carga
+`tests/load/transfers.js` (k6) recorre la Saga completa contra producción con tres perfiles: `smoke`, `load` (5 transferencias/s) y `stress` (hasta 25/s). Instrucciones en [pruebas de carga](../pruebas/carga.md); los resultados de la prueba de estrés y su verificación están en el [postmortem de estrés](../postmortems/2026-10-21-estres-account-concurrencia.md).
+
+## Escenarios de fallo
+Con la carga corriendo se inyectan fallos controlados: procesador de pagos degradado (`/api/admin/payment-simulation`), caída de Account y el banco pareja simulado (`interbank-mock` en modos `reject`, `no-callback` o `down`). Cada escenario termina en un postmortem. Ver [escenarios de fallo](../pruebas/escenarios-de-fallo.md) y [postmortems](../postmortems/).
 
 ![E2E](../assets/diagramas/e2e-test-flow.png)

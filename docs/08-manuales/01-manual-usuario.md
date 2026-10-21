@@ -1,6 +1,11 @@
 # 19. Manual de usuario
 
 ## URLs
+### Producción
+- Frontend: URL del servicio Cloud Run `bank-usac-frontend` (HTTPS; queda en el resumen de `cd-prod.yml`).
+- Contrato interbancario (para el banco pareja): `https://35-244-157-47.sslip.io/interbank/v1`.
+- MailHog: `kubectl -n prod port-forward svc/mailhog 8025:8025` y abrir `http://localhost:8025`.
+
 ### Docker Compose
 - Frontend: `http://localhost:3000`
 - Gateway: `http://localhost:8080`
@@ -26,7 +31,7 @@
 En **Cuentas** (`/accounts`) se ve un resumen (saldo total, disponible y cuentas activas) y la tabla de cuentas con saldo, reservado, disponible, saldo mínimo, comisión y estado. Cada ID se muestra acortado con un botón para **copiar** el ID completo (sirve para compartirlo con quien te va a transferir). Para abrir una cuenta: elegir tipo (monetaria o ahorro), saldo inicial y, opcionalmente, saldo mínimo y comisión, y presionar **Crear cuenta**. CASHIER y ADMIN primero eligen el **cliente** de una lista.
 
 ## Navegación
-Después de iniciar sesión, la barra superior muestra solo las opciones del rol: CLIENT ve Inicio, Perfil, Cuentas, Transferir e Historial; CASHIER agrega Pagos; ADMIN agrega Pagos, Clientes, Notificaciones y Auditoría (no transfiere).
+Después de iniciar sesión, la barra superior muestra solo las opciones del rol: CLIENT ve Inicio, Perfil, Cuentas, Transferir, Otro banco e Historial; CASHIER agrega Pagos; ADMIN agrega Pagos, Clientes, Notificaciones y Auditoría (no transfiere).
 
 ## Transferencia CLIENT
 Requisito: el KYC del cliente debe estar `VERIFIED`. Mientras no lo esté, Inicio y Transferir muestran un aviso y la transferencia se rechaza con `KYC_NOT_VERIFIED`. Un ADMIN lo verifica en **Clientes** (ver [ADMIN](#admin)).
@@ -39,6 +44,15 @@ Requisito: el KYC del cliente debe estar `VERIFIED`. Mientras no lo esté, Inici
 6. **Ver historial de la cuenta** abre el historial filtrado por esa cuenta.
 
 Estados mostrados: Recibida en cola → Pendiente → Procesando pago → Completada, o Fallida / Fallida · fondos devueltos (compensada). El código de seguimiento (`correlationId`) queda visible, con botón para copiarlo, para rastrear la transferencia en auditoría. Desde **Cuentas → Transferir** la cuenta origen llega ya seleccionada.
+
+## Depósito a otro banco
+Mismo requisito de KYC `VERIFIED` que una transferencia interna.
+
+1. abrir **Otro banco** (`/interbank`);
+2. elegir la cuenta origen, el banco destino (**BANK13**, el banco pareja, o **BANK99**, el banco simulado para pruebas), el número de cuenta en el otro banco y el monto (hasta Q10,000.00 por depósito). La descripción es opcional;
+3. enviar: se reservan el monto y la comisión de la cuenta, y el estado se actualiza solo: Pendiente → Enviado al otro banco → Aceptado por el otro banco. Si el otro banco rechaza o no responde, el depósito termina como *Rechazado · fondos devueltos* o *Revertido · fondos devueltos*, con el motivo;
+4. quedan visibles el código de seguimiento (`correlationId`) y la **traza** (`traceId`), con botón para copiarlos. El `traceId` sirve para ver el depósito en Tempo, también del lado del otro banco;
+5. **Consultar un depósito** permite volver a seguir uno con su código de seguimiento.
 
 ## Historial
 En **Historial** (`/transactions`) el CLIENT elige una de sus cuentas; ADMIN y CASHIER eligen el cliente y luego una de sus cuentas, de listas (o llegan desde **Cuentas → Historial**). Filtros por rango de fechas y estado (`PENDING`, `APPROVED`, `FAILED`), con paginación; las fallidas muestran el motivo.

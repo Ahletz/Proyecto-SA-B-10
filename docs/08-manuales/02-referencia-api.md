@@ -1,5 +1,6 @@
 # 20. Referencia API del Gateway
 
+Base en producción: el frontend en Cloud Run reenvía `/api` al Gateway (mismo origen). El banco pareja entra por `https://35-244-157-47.sslip.io`.  
 Base Docker: `http://localhost:8080`  
 Base kind: `http://localhost:30080`
 
@@ -74,9 +75,24 @@ Respuesta:
 {"items":[{"transactionId":"uuid","sourceAccount":"uuid","targetAccount":"uuid","direction":"OUTGOING","amount":250,"status":"APPROVED","detailedStatus":"COMPLETED","failureReason":null,"correlationId":"uuid","createdAt":"ISO-8601","updatedAt":"ISO-8601"}],"page":1,"size":20,"total":1}
 ```
 
-`status` es el estado del contrato de Fase 2. `detailedStatus` es el estado interno de la Saga: `PENDING`, `PROCESSING` y `COMPENSATING` se exponen como `PENDING`; `COMPLETED` como `APPROVED`; `FAILED` y `COMPENSATED` como `FAILED`. `direction` indica si la cuenta consultada envió (`OUTGOING`) o recibió (`INCOMING`) el dinero.
+`status` es el estado público del contrato. `detailedStatus` es el estado interno de la Saga: `PENDING`, `PROCESSING` y `COMPENSATING` se exponen como `PENDING`; `COMPLETED` como `APPROVED`; `FAILED` y `COMPENSATED` como `FAILED`. `direction` indica si la cuenta consultada envió (`OUTGOING`) o recibió (`INCOMING`) el dinero.
 
-`failureReason` es `null` salvo que la Saga falle o compense: `KYC_NOT_VERIFIED`, `INSUFFICIENT_FUNDS` (lo manda Account) o los motivos de Payment con prefijo `PAYMENT_` (`PAYMENT_TIMEOUT`, `PAYMENT_EXTERNAL_FAILURE`, `PAYMENT_LIMIT_EXCEEDED`, …). También lo devuelve `GET /api/transfers/:correlationId`.
+`failureReason` es `null` salvo que la Saga falle o compense: `KYC_NOT_VERIFIED`, `INSUFFICIENT_FUNDS` (lo manda Account), los motivos de Payment con prefijo `PAYMENT_` o, en un depósito a otro banco, con prefijo `INTERBANK_` (`PAYMENT_TIMEOUT`, `PAYMENT_EXTERNAL_FAILURE`, `PAYMENT_LIMIT_EXCEEDED`, …). También lo devuelve `GET /api/transfers/:correlationId`.
+
+## Depósitos interbancarios
+| Método | Ruta | Acceso | Descripción |
+|---|---|---|---|
+| POST | `/api/interbank-transfers` | CLIENT (solo sus cuentas) | publica `transaction.interbank.requested` y responde `202` con `correlationId`, `eventId` y `traceId` |
+| GET | `/api/interbank-transfers/:correlationId` | CLIENT (solo los suyos), CASHIER, ADMIN | estado de la Saga, `interbankState`, banco destino y motivo de rechazo |
+
+Request:
+```json
+{"sourceAccount":"uuid","destinationBankCode":"BANK13","destinationAccount":"109732195767","amount":"150.00","description":"opcional"}
+```
+
+`destinationBankCode` con formato `BANKnn`, cuenta destino de 1 a 34 caracteres alfanuméricos o guiones y monto con hasta 2 decimales. Los motivos de rechazo llevan prefijo `INTERBANK_` (`INTERBANK_REJECTED`, `INTERBANK_TIMEOUT`, …).
+
+El contrato para el banco pareja (`/interbank/v1/*`, autenticado con `X-Api-Key`) está en [API Gateway y seguridad](../01-arquitectura/03-api-gateway-seguridad.md#rutas-interbancarias-y-de-administración) y en `docs/interbank/openapi.yaml`.
 
 ## Administración
 | Método | Ruta | Acceso |
@@ -84,6 +100,7 @@ Respuesta:
 | GET | `/api/audit/events` | ADMIN |
 | GET | `/api/payments` | ADMIN/CASHIER |
 | GET | `/api/payments/transaction/:id` | ADMIN/CASHIER |
+| GET, POST, DELETE | `/api/admin/payment-simulation` | ADMIN · inyección de fallos en Payment (`failureRate`, `timeoutRate`, `timeoutMs`, `latencyMs`) |
 
 ## Health
 - `GET /health`

@@ -1,6 +1,6 @@
 # 2. Modelo de dominio y bounded contexts
 
-Documento único del modelo de dominio (Fase 2): entidades, estados y reglas de cada bounded context, y el diagrama entidad-relación por base de datos.
+Documento único del modelo de dominio: entidades, estados y reglas de cada bounded context, y el diagrama entidad-relación por base de datos.
 
 ## Customer Context
 **Entidad:** `Customer`.
@@ -50,6 +50,8 @@ Estados públicos (historial y `transaction.status.changed`): `COMPLETED` → `A
 
 El historial por cuenta se filtra por rango de fechas y estado público, con paginación.
 
+**Depósito interbancario:** la misma entidad `Transaction` representa un depósito a otro banco. `destination_bank_code` guarda el banco destino (`BANKnn`; vacío en una transferencia interna), `target_account` la cuenta en el otro banco y `interbank_state` el estado frente al banco pareja: `PENDING`, `SENT`, `TIMEOUT`, `ACCEPTED`, `REJECTED` o `REVERSED`. Un estado final (`ACCEPTED`, `REJECTED`, `REVERSED`) nunca se sobrescribe con uno anterior aunque el evento llegue tarde. El `interbankTransferId` del contrato es el `transactionId`. Detalle en [Saga del depósito interbancario](../03-saga/02-deposito-interbancario.md).
+
 ## Payment Context
 **Entidades:** `PaymentEntity`, `ProcessedEventEntity`.
 
@@ -90,12 +92,12 @@ Cada microservicio posee su propia base de datos PostgreSQL, sin claves foránea
 | Base | Servicio | Tablas |
 | ---- | -------- | ------ |
 | `bank_customer` | Customer | `customers` (incluye `kyc_status`) |
-| `bank_account` | Account | `accounts` (tipo, saldo mínimo, comisión), `transfer_reservations`, `processed_events` |
-| `bank_transaction` | Transaction | `transactions` (incluye `failure_reason`), `customer_kyc_status`, `processed_events` |
-| `bank_payment` | Payment | `payments`, `processed_events` |
+| `bank_account` | Account | `accounts` (tipo, saldo mínimo, comisión), `transfer_reservations`, `interbank_operations` (reserva, débito y crédito de cada depósito interbancario), `processed_events` |
+| `bank_transaction` | Transaction | `transactions` (incluye `failure_reason`, `destination_bank_code` e `interbank_state`), `customer_kyc_status`, `processed_events` |
+| `bank_payment` | Payment | `payments`, `interbank_transfers` (depósitos enviados y recibidos, con su estado frente al banco pareja), `interbank_reversals`, `processed_events` |
 | `bank_notification` | Notification & Audit | `processed_events` (auditoría con `payload` y clasificación `severity`/`origin`) |
 
-Cada servicio que consume eventos tiene su propia tabla `processed_events` para la idempotencia por `eventId`; no es una tabla compartida. La única relación dibujada es interna de `bank_account` (`accounts` → `transfer_reservations`, por id y sin FK).
+Cada servicio que consume eventos tiene su propia tabla `processed_events` para la idempotencia por `eventId`; no es una tabla compartida. Las únicas relaciones dibujadas son internas de una base y por id, sin FK: `accounts` → `transfer_reservations` e `interbank_operations` en `bank_account`, e `interbank_transfers` → `interbank_reversals` en `bank_payment`.
 
 ![Diagrama ER por base de datos](../assets/diagramas/er-databases.png)
 

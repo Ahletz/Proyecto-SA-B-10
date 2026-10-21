@@ -1,5 +1,5 @@
 ---
-title: C4 Nivel 3 — Transaction Service (Fase 2)
+title: C4 Nivel 3 — Transaction Service
 config:
   layout: elk
   flowchart:
@@ -8,18 +8,20 @@ config:
 flowchart TB
     gateway["API Gateway\nhistorial y estado por correlationId"]
     rabbit{{"RabbitMQ\nbank.events · .retry · .dlx"}}
+    otel["OTel Collector\nOTLP trazas y métricas"]
 
     subgraph tx["Transaction Service — NestJS :3003"]
         direction TB
-        consumer["TransactionEventsConsumer\ntransfer.requested · account.funds.* ·\npayment.rejected · account.transfer.completed ·\ncustomer.kyc.status.changed"]
+        consumer["TransactionEventsConsumer\ntransfer.requested · interbank.requested ·\naccount.funds.* · payment.rejected ·\naccount.transfer.completed · interbank.transfer.* ·\naccount.interbank.* · customer.kyc.status.changed"]
         controller["TransactionQueryController\nGET /api/transactions?accountId&from&to&status\nGET /api/transactions/correlation/:id"]
 
-        create["CreateTransactionService\ncrea PENDING o FAILED (KYC_NOT_VERIFIED)"]
-        update["UpdateTransactionStateService\nPROCESSING · COMPLETED · FAILED ·\nCOMPENSATING · COMPENSATED + failure_reason"]
+        create["CreateTransactionService\ncrea PENDING o FAILED (KYC_NOT_VERIFIED),\ninterna o interbancaria (banco y cuenta destino)"]
+        update["UpdateTransactionStateService\nPROCESSING · COMPLETED · FAILED ·\nCOMPENSATING · COMPENSATED + failure_reason;\ninterbankState PENDING · SENT · TIMEOUT ·\nACCEPTED · REJECTED · REVERSED"]
         history["GetTransactionHistoryService\norigen o destino, filtros, paginación,\nestado público PENDING/APPROVED/FAILED"]
         kyc["CustomerKycService\nproyección local del KYC\n(ignora eventos más viejos)"]
         idem["EventIdempotencyService\neventId procesados"]
-        publisher["TransactionEventPublisher\ncreated · completed · failed · compensated ·\nstatus.changed · eventId determinista + causationId"]
+        publisher["TransactionEventPublisher\ncreated · completed · failed · compensated ·\nstatus.changed · interbank.transfer.requested ·\neventId determinista + causationId"]
+        telemetry["Telemetría (tracing.ts, telemetry.ts, JsonLogger)\nspans de la Saga y de compensación ·\nbank.transfer.duration · bank.operations ·\ntraceparent en headers AMQP · logs JSON enmascarados"]
         rabbitsvc["RabbitMqService\npub/sub + retry/DLQ,\ntermina el proceso si cae la conexión"]
 
         txrepo["TransactionRepository (puerto)"]
@@ -39,6 +41,8 @@ flowchart TB
     consumer -->|"transiciones de la Saga"| update
     consumer -->|"publica resultado"| publisher
     publisher --> rabbitsvc
+    consumer -->|"spans y métricas"| telemetry
+    telemetry -->|"OTLP"| otel
     rabbitsvc -->|"publish"| rabbit
 
     controller --> history
@@ -59,7 +63,7 @@ flowchart TB
     classDef infra fill:#e5e7eb,color:#172033,stroke:#6b7280
     classDef dbc fill:#fff7e6,color:#172033,stroke:#b54708
     class gateway edge
-    class consumer,controller,create,update,history,kyc,idem,publisher,rabbitsvc,txorm,kycorm svc
+    class consumer,controller,create,update,history,kyc,idem,publisher,rabbitsvc,txorm,kycorm,telemetry svc
     class txrepo,kycrepo port
-    class rabbit infra
+    class rabbit,otel infra
     class db dbc

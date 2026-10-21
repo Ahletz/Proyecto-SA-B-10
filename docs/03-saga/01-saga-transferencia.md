@@ -18,7 +18,7 @@ En los pasos 2, 7 y en cada estado terminal, Transaction publica además `transa
 
 ![Happy path](../assets/diagramas/saga-success.png)
 
-## Cliente sin KYC verificado (Fase 2)
+## Cliente sin KYC verificado
 Transaction mantiene una proyección local del estado KYC (`customer_kyc_status`) alimentada por `customer.kyc.status.changed`, sin llamadas síncronas a Customer. Si el cliente no está `VERIFIED` (o no hay registro, que cuenta como `PENDING`), la transacción queda `FAILED` con motivo `KYC_NOT_VERIFIED` y se publican `transaction.failed` y `transaction.status.changed`. No se publica `transaction.created`, así que Account nunca reserva fondos.
 
 ## Fondos insuficientes
@@ -26,7 +26,7 @@ Si Account no encuentra cuentas activas (`ACCOUNT_NOT_FOUND_OR_INACTIVE`) o el s
 
 ## Rechazo posterior a reserva
 1. Account ya reservó fondos.
-2. Payment publica `payment.rejected` con uno de estos motivos: `PAYMENT_LIMIT_EXCEEDED`, `INVALID_AMOUNT` o, en Fase 2, el resultado simulado del procesador externo: `EXTERNAL_FAILURE` (10 % por defecto) o `TIMEOUT` (5 % por defecto, tras 3 s de espera). Las tasas se configuran con `PAYMENT_SIMULATE_FAILURE_RATE` y `PAYMENT_SIMULATE_TIMEOUT_RATE`.
+2. Payment publica `payment.rejected` con uno de estos motivos: `PAYMENT_LIMIT_EXCEEDED`, `INVALID_AMOUNT` o el resultado simulado del procesador externo: `EXTERNAL_FAILURE` o `TIMEOUT` (tras 3 s de espera). Las tasas se configuran con `PAYMENT_SIMULATE_FAILURE_RATE` y `PAYMENT_SIMULATE_TIMEOUT_RATE` (en `dev`, 10 % y 5 %; en `prod`, 0) y se cambian en caliente con `/api/admin/payment-simulation` para los escenarios de fallo.
 3. Transaction cambia a `COMPENSATING`.
 4. Account consume el rechazo, disminuye `reservedBalance`, marca la reserva `RELEASED` y publica `account.funds.released`.
 5. Transaction cambia a `COMPENSATED` y publica `transaction.compensated`.
@@ -45,7 +45,7 @@ El saldo original queda restaurado porque el débito definitivo nunca se ejecut�
 
 Cuando la Saga falla o compensa, el motivo queda en `failure_reason` y se ve en el historial (`failureReason`).
 
-## Idempotencia y reintentos (Fase 2)
+## Idempotencia y reintentos
 - Cada consumidor registra el `eventId` de los eventos procesados y descarta duplicados.
 - Transaction genera `eventId` deterministas por transacción y transición. Si reprocesa un evento (por ejemplo, porque cayó antes de marcarlo como procesado), republica los mismos `eventId` y los consumidores descartan la copia.
 - Cada evento publicado por Transaction lleva en `causationId` el `eventId` del evento que lo provocó.
@@ -63,4 +63,13 @@ Fallos y compensación (KYC no verificado, fondos insuficientes y pago rechazado
 
 Fuentes Mermaid: `docs/01-arquitectura/c4-src/sequence-transfer.mmd` y `sequence-transfer-failure.mmd`.
 
-> `saga-success.png` y `saga-compensation.png` son la vista general de Fase 1; el detalle de Fase 2 está en las dos secuencias de arriba.
+> `saga-success.png` y `saga-compensation.png` son la vista general; el detalle está en las dos secuencias de arriba.
+
+## Observabilidad de la Saga
+
+- **Una sola traza por transferencia.** El Gateway abre la traza y `traceparent` viaja en los headers AMQP de cada evento, así que Transaction, Account y Payment agregan sus spans a la misma traza. Cada span lleva `bank.correlation_id`.
+- **Spans de la Saga:** `transaction.saga.start` al crear la transacción y `transaction.saga.compensate` en cada compensación. Cada cambio de estado se registra como evento `saga.state_changed` del span, con `bank.transaction.state`, con el motivo en `bank.transaction.failure_reason`.
+- **Métricas:** `bank_transfer_duration_seconds{type,outcome}` mide la transferencia de punta a punta (p50/p95/p99) y `bank_operations_total{operation="transaction.transfer.internal"}` alimenta el SLO de disponibilidad. Ver [catálogo de métricas](../observabilidad/catalogo-metricas.md).
+- **Logs:** JSON con `traceId`, `spanId` y `correlationId`, consultables en Loki desde la traza.
+
+El depósito a otro banco sigue el mismo estilo; ver [Saga del depósito interbancario](02-deposito-interbancario.md).

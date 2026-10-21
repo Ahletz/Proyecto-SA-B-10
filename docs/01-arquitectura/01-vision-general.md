@@ -25,7 +25,7 @@ Bank USAC implementa un sistema bancario académico desacoplado, observable y de
 ![Contexto](../assets/diagramas/c4-context.png)
 
 ## C4 Nivel 2
-![Contenedores](../assets/diagramas/c4-container.png)
+![Contenedores](../assets/diagramas/c4-container-fase3.png)
 
 ## C4 Nivel 3
 - [Customer Service](../assets/diagramas/c4-component-customer.png)

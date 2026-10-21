@@ -1,6 +1,8 @@
 # Prueba de carga del HPA
 
-Evidencia de que el HPA (`autoscaling/v2`, 80 % de CPU, 1–5 réplicas) escala los microservicios bajo carga y vuelve a bajar sin ella. Se corrió en un cluster kind local con el overlay `dev` (el mismo que despliega `cd-dev.yml`) y `metrics-server`. En producción (GKE) se repetirá cuando exista el cluster.
+Evidencia de que el HPA (`autoscaling/v2`, 80 % de CPU, 1–5 réplicas) escala los microservicios bajo carga y vuelve a bajar sin ella. Se corrió en un cluster kind local con el overlay `dev` (el mismo que despliega `cd-dev.yml`) y `metrics-server`.
+
+En producción (GKE) el HPA se evidenció con las pruebas de carga sobre el flujo de transferencias (k6, [pruebas de carga](../pruebas/carga.md)). En la prueba de estrés, Account y Transaction escalaron a 5 réplicas y el API Gateway de 1 a 3; los ajustes que salieron de ahí (pool de 4 conexiones por réplica, HPA propio del Gateway) están en el [postmortem de estrés](../postmortems/2026-10-21-estres-account-concurrencia.md) y en [Despliegue](07-despliegue-fase3.md#capacidad-lecciones-de-las-pruebas-de-carga).
 
 ## Configuración
 
