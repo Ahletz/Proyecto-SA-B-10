@@ -16,6 +16,7 @@ import { InterbankState } from '../../domain/enums/interbank-state.enum';
 import { RabbitMqService } from '../../infrastructure/messaging/rabbitmq.service';
 import { TransactionEventPublisher } from '../../infrastructure/messaging/transaction-event.publisher';
 import { EventIdempotencyService } from '../../infrastructure/messaging/event-idempotency.service';
+import { recordDuplicateEvent, withSagaSpan } from '../../../common/telemetry';
 
 interface TransferRequestedPayload {
   sourceAccount: string;
@@ -64,6 +65,21 @@ type TransactionEventPayload =
 
 export const KYC_NOT_VERIFIED = 'KYC_NOT_VERIFIED';
 export const AMOUNT_LIMIT_EXCEEDED = 'AMOUNT_LIMIT_EXCEEDED';
+
+// Eventos que abren la Saga y eventos de compensación: cada uno corre dentro de
+// su propio span (transaction.saga.start / transaction.saga.compensate) para que
+// el inicio y las compensaciones se vean como tales en la traza.
+const SAGA_START = new Set([
+  'transaction.transfer.requested',
+  'transaction.interbank.requested',
+]);
+const SAGA_COMPENSATE = new Set([
+  'payment.rejected',
+  'account.funds.released',
+  'interbank.transfer.rejected',
+  'interbank.transfer.reversed',
+  'account.interbank.funds.released',
+]);
 
 const BANK_CODE = /^BANK[0-9]{2}$/;
 const EXTERNAL_ACCOUNT = /^[A-Za-z0-9-]{1,34}$/;
@@ -188,6 +204,8 @@ export class TransactionEventsConsumer
         );
 
     if (alreadyProcessed) {
+      recordDuplicateEvent(event.eventType);
+
       this.logger.warn(
         `Duplicate event ignored ` +
           `[eventId=${event.eventId}]`,
@@ -202,6 +220,32 @@ export class TransactionEventsConsumer
         `[correlationId=${event.correlationId}]`,
     );
 
+    const sagaSpan = SAGA_START.has(event.eventType)
+      ? 'transaction.saga.start'
+      : SAGA_COMPENSATE.has(event.eventType)
+        ? 'transaction.saga.compensate'
+        : null;
+
+    if (sagaSpan) {
+      await withSagaSpan(
+        sagaSpan,
+        {
+          'bank.correlation_id': event.correlationId,
+          'bank.event.type': event.eventType,
+        },
+        () => this.dispatch(event),
+      );
+    } else {
+      await this.dispatch(event);
+    }
+
+    await this.eventIdempotencyService
+      .markAsProcessed(event);
+  }
+
+  private async dispatch(
+    event: BankEvent<TransactionEventPayload>,
+  ): Promise<void> {
     switch (event.eventType) {
       case 'transaction.transfer.requested':
         await this.handleTransferRequested(
@@ -318,9 +362,6 @@ export class TransactionEventsConsumer
           `Unsupported event: ${event.eventType}`,
         );
     }
-
-    await this.eventIdempotencyService
-      .markAsProcessed(event);
   }
 
   private async handleTransferRequested(

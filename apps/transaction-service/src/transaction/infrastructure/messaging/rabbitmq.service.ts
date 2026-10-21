@@ -13,6 +13,8 @@ import type {
 } from 'amqplib';
 
 import { BankEvent } from '../../../common/events/bank-event.interface';
+import { runWithCorrelationId } from '../../../common/correlation';
+import { withConsumerSpan, withProducerSpan } from '../../../common/telemetry';
 
 @Injectable()
 export class RabbitMqService
@@ -119,19 +121,27 @@ export class RabbitMqService
         'bank.events',
       );
 
-    const published = channel.publish(
-      exchange,
+    // El span "publish <routingKey>" mete el traceparent en los headers del
+    // mensaje: el consumidor continúa la misma traza (W3C Trace Context).
+    const published = withProducerSpan(
       routingKey,
-      Buffer.from(
-        JSON.stringify(event),
-      ),
-      {
-        persistent: true,
-        contentType: 'application/json',
-        messageId: event.eventId,
-        correlationId: event.correlationId,
-        timestamp: Date.now(),
-      },
+      event.correlationId,
+      (headers) =>
+        channel.publish(
+          exchange,
+          routingKey,
+          Buffer.from(
+            JSON.stringify(event),
+          ),
+          {
+            persistent: true,
+            contentType: 'application/json',
+            messageId: event.eventId,
+            correlationId: event.correlationId,
+            timestamp: Date.now(),
+            headers,
+          },
+        ),
     );
 
     if (!published) {
@@ -255,7 +265,15 @@ export class RabbitMqService
         }
 
         try {
-          await handler(message);
+          // Span "process <routingKey>" hijo del publicador y correlationId
+          // disponible para los logs mientras se procesa el evento.
+          await runWithCorrelationId(
+            message.properties.correlationId,
+            () =>
+              withConsumerSpan(message, () =>
+                handler(message),
+              ),
+          );
 
           channel.ack(message);
         } catch (error) {
