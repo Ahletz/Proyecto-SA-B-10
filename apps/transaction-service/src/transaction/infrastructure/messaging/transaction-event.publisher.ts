@@ -9,6 +9,7 @@ import {
   toPublicStatus,
 } from '../../domain/enums/public-transaction-status.enum';
 import { RabbitMqService } from './rabbitmq.service';
+import { recordTransferResult } from '../../../common/telemetry';
 
 interface TransactionCreatedPayload {
   transactionId: string;
@@ -173,6 +174,8 @@ export class TransactionEventPublisher {
       event,
     );
 
+    recordTransferResult(transaction);
+
     await this.publishStatusChanged(
       transaction,
       causationId,
@@ -203,6 +206,8 @@ export class TransactionEventPublisher {
       event,
     );
 
+    recordTransferResult(transaction);
+
     await this.publishStatusChanged(
       transaction,
       causationId,
@@ -232,6 +237,8 @@ export class TransactionEventPublisher {
       event.eventType,
       event,
     );
+
+    recordTransferResult(transaction);
 
     await this.publishStatusChanged(
       transaction,

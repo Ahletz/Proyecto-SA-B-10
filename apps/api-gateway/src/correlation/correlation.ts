@@ -1,6 +1,7 @@
 import { AsyncLocalStorage } from 'async_hooks';
 import { randomUUID } from 'crypto';
 import type { NextFunction, Request, Response } from 'express';
+import { trace } from '@opentelemetry/api';
 
 export const CORRELATION_HEADER = 'X-Correlation-Id';
 
@@ -27,5 +28,7 @@ export function runWithCorrelationId<T>(correlationId: string, fn: () => T): T {
 export function correlationMiddleware(req: Request, res: Response, next: NextFunction): void {
   const correlationId = resolveCorrelationId(req.headers['x-correlation-id']);
   res.setHeader(CORRELATION_HEADER, correlationId);
+  // correlationId (flujo de negocio) como atributo del span HTTP; traceId es la traza técnica.
+  trace.getActiveSpan()?.setAttribute('bank.correlation_id', correlationId);
   runWithCorrelationId(correlationId, next);
 }
