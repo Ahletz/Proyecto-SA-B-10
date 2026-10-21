@@ -1,0 +1,56 @@
+name: deploy-observability
+
+on:
+  push:
+    branches: [develop, main, feature/fase3-observabilidad]
+    paths:
+      - "observability/**"
+      - ".github/workflows/deploy-observability.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-observability
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - uses: google-github-actions/get-gke-credentials@v2
+        with:
+          cluster_name: ${{ vars.GKE_CLUSTER }}
+          location: ${{ vars.GKE_LOCATION }}
+
+      - name: Validar manifiestos
+        run: kubectl kustomize observability > /dev/null
+
+      - name: Crear namespace y secreto de Grafana
+        env:
+          GRAFANA_ADMIN_PASSWORD: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
+        run: |
+          kubectl apply -f observability/k8s/namespace.yaml
+          kubectl -n observability create secret generic grafana-admin \
+            --from-literal=password="${GRAFANA_ADMIN_PASSWORD}" \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Aplicar el stack
+        run: kubectl apply -k observability
+
+      - name: Recargar configuración
+        run: |
+          kubectl -n observability rollout restart deployment/prometheus deployment/grafana
+
+      - name: Esperar a que todo esté listo
+        run: |
+          for d in otel-collector prometheus kube-state-metrics tempo loki grafana; do
+            kubectl -n observability rollout status deployment/$d --timeout=300s
+          done

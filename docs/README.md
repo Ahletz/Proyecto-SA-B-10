@@ -52,7 +52,7 @@ La segunda fase amplía la solución con:
 17. [Prueba de carga del HPA](04-despliegue/06-prueba-hpa.md)
 18. [Resiliencia y observabilidad](05-operacion/01-resiliencia-observabilidad.md)
 19. [SLI, SLO y SLA](05-operacion/02-sli-slo-sla.md)
-20. [Casos de uso](06-casos-uso/01-casos-de-uso.md)
+20. [Casos de uso](uml/use-cases.md)
 21. [Pruebas](07-pruebas/01-estrategia-pruebas.md)
 22. [Guía de demostración](07-pruebas/02-guia-demostracion.md)
 23. [Checklist de calificación](07-pruebas/03-checklist-calificacion.md)

@@ -8,10 +8,16 @@ import { ReservationEntity } from './reservation.entity';
 import { ProcessedEventEntity } from './processed-event.entity';
 import { RabbitService } from './rabbit.service';
 import { BankEvent } from '../common/bank-event';
+import { recordAnomaly, recordDuplicateEvent, timed } from '../common/telemetry';
+import { AnomalyDetector } from './anomaly-detector';
+
+type StepResult = 'done' | 'rejected' | 'skipped';
 
 @Injectable()
 export class AccountService {
   private readonly logger = new Logger(AccountService.name);
+  // Umbral configurable por ConfigMap: ANOMALY_MAX_OPS y ANOMALY_WINDOW_MINUTES.
+  private readonly anomalies = new AnomalyDetector();
   constructor(
     @InjectRepository(AccountEntity) private readonly accounts: Repository<AccountEntity>,
     @InjectRepository(ReservationEntity) private readonly reservations: Repository<ReservationEntity>,
@@ -58,28 +64,36 @@ export class AccountService {
   async get(accountId: string) { const a = await this.accounts.findOneBy({ accountId }); if (!a) throw new Error('Account not found'); return this.toDto(a); }
 
   async handle(event: BankEvent<any>) {
-    if (await this.processed.existsBy({ eventId: event.eventId })) return;
-    if (event.eventType === 'transaction.created') await this.reserve(event);
-    else if (event.eventType === 'payment.approved') await this.complete(event);
-    else if (event.eventType === 'payment.rejected') await this.release(event);
+    if (await this.processed.existsBy({ eventId: event.eventId })) {
+      recordDuplicateEvent(event.eventType);
+      return;
+    }
+    // Un rechazo de negocio (sin fondos, cuenta inactiva) no es una falla técnica.
+    const classify = (r: StepResult) => (r === 'rejected' ? 'business_rejection' : 'success');
+    if (event.eventType === 'transaction.created') await timed('account.reserve', () => this.reserve(event), classify);
+    else if (event.eventType === 'payment.approved') await timed('account.complete', () => this.complete(event), classify);
+    else if (event.eventType === 'payment.rejected') await timed('account.release', () => this.release(event), classify);
     await this.processed.save({ eventId: event.eventId, eventType: event.eventType, correlationId: event.correlationId, processedAt: new Date() });
   }
 
-  private async reserve(event: BankEvent<any>) {
+  private async reserve(event: BankEvent<any>): Promise<StepResult> {
     const p = event.payload;
-    if (await this.reservations.existsBy({ transactionId: p.transactionId })) return;
+    if (await this.reservations.existsBy({ transactionId: p.transactionId })) return 'skipped';
     const source = await this.accounts.findOneBy({ accountId: p.sourceAccount });
     const target = await this.accounts.findOneBy({ accountId: p.targetAccount });
     const amount = Number(p.amount);
     if (!source || !target || source.status !== 'ACTIVE' || target.status !== 'ACTIVE') {
-      return this.emit('account.funds.rejected', event.correlationId, { transactionId: p.transactionId, reason: 'ACCOUNT_NOT_FOUND_OR_INACTIVE' });
+      await this.emit('account.funds.rejected', event.correlationId, { transactionId: p.transactionId, reason: 'ACCOUNT_NOT_FOUND_OR_INACTIVE' });
+      return 'rejected';
     }
+    await this.checkAnomaly(source, p.transactionId, event.correlationId);
     const fee = Number(source.feeAmount ?? 0);
     const totalHold = amount + fee;
     const minBalance = Number(source.minBalance ?? 0);
     const available = Number(source.balance) - Number(source.reservedBalance) - minBalance;
     if (available < totalHold) {
-      return this.emit('account.funds.rejected', event.correlationId, { transactionId: p.transactionId, reason: 'INSUFFICIENT_FUNDS' });
+      await this.emit('account.funds.rejected', event.correlationId, { transactionId: p.transactionId, reason: 'INSUFFICIENT_FUNDS' });
+      return 'rejected';
     }
     source.reservedBalance = (Number(source.reservedBalance) + totalHold).toFixed(2);
     source.lastActivityAt = new Date();
@@ -91,12 +105,39 @@ export class AccountService {
     await this.emit('account.funds.reserved', event.correlationId, {
       transactionId: p.transactionId, sourceAccount: p.sourceAccount, targetAccount: p.targetAccount, amount, fee,
     });
+    return 'done';
   }
 
-  private async complete(event: BankEvent<any>) {
+  // Actividad anómala: más de N operaciones en M minutos desde la misma cuenta.
+  // Publica account.anomaly.detected (lo consumen Notification y Audit) y deja un log WARN.
+  private async checkAnomaly(source: AccountEntity, transactionId: string, correlationId: string) {
+    const anomaly = this.anomalies.record(source.accountId);
+    if (!anomaly) return;
+    recordAnomaly();
+    this.logger.warn({
+      message: 'Actividad anómala detectada en cuenta',
+      event: 'account.anomaly.detected',
+      accountId: source.accountId,
+      operationCount: anomaly.operationCount,
+      threshold: anomaly.threshold,
+      windowMinutes: anomaly.windowMinutes,
+    });
+    await this.emit('account.anomaly.detected', correlationId, {
+      accountId: source.accountId,
+      customerId: source.customerId,
+      transactionId,
+      reason: 'HIGH_FREQUENCY',
+      operationCount: anomaly.operationCount,
+      threshold: anomaly.threshold,
+      windowMinutes: anomaly.windowMinutes,
+      detectedAt: new Date().toISOString(),
+    });
+  }
+
+  private async complete(event: BankEvent<any>): Promise<StepResult> {
     const tx = event.payload.transactionId;
     const r = await this.reservations.findOneBy({ transactionId: tx });
-    if (!r || r.status === 'COMPLETED') return;
+    if (!r || r.status === 'COMPLETED') return 'skipped';
     const s = await this.accounts.findOneByOrFail({ accountId: r.sourceAccount });
     const t = await this.accounts.findOneByOrFail({ accountId: r.targetAccount });
     const amount = Number(r.amount);
@@ -113,12 +154,13 @@ export class AccountService {
     await this.emit('account.transfer.completed', event.correlationId, {
       transactionId: tx, sourceAccount: s.accountId, targetAccount: t.accountId, amount, fee,
     });
+    return 'done';
   }
 
-  private async release(event: BankEvent<any>) {
+  private async release(event: BankEvent<any>): Promise<StepResult> {
     const tx = event.payload.transactionId;
     const r = await this.reservations.findOneBy({ transactionId: tx });
-    if (!r || r.status === 'RELEASED') return;
+    if (!r || r.status === 'RELEASED') return 'skipped';
     const s = await this.accounts.findOneByOrFail({ accountId: r.sourceAccount });
     const totalHold = Number(r.amount) + Number(r.feeAmount ?? 0);
     s.reservedBalance = Math.max(0, Number(s.reservedBalance) - totalHold).toFixed(2);
@@ -129,6 +171,7 @@ export class AccountService {
     await this.emit('account.funds.released', event.correlationId, {
       transactionId: tx, amount: Number(r.amount), fee: Number(r.feeAmount ?? 0), reason: 'SAGA_COMPENSATION',
     });
+    return 'done';
   }
 
   @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT)

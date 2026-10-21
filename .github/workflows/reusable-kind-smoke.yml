@@ -84,7 +84,9 @@ jobs:
         run: |
           HOST_GATEWAY=$(docker inspect bank-usac-control-plane -f '{{(index .NetworkSettings.Networks "kind").Gateway}}')
           echo "External DB host from kind = $HOST_GATEWAY"
-          kubectl kustomize k8s/overlays/dev | sed "s/__HOST_GATEWAY__/$HOST_GATEWAY/g" | kubectl apply -f -
+          kubectl kustomize k8s/overlays/dev \
+            | sed -e "s/__HOST_GATEWAY__/$HOST_GATEWAY/g" -e "s/__APP_VERSION__/$TAG/" \
+            | kubectl apply -f -
           for d in rabbitmq $SERVICES; do
             kubectl -n dev rollout status "deployment/$d" --timeout=300s
           done

@@ -18,7 +18,7 @@ Este documento define los acuerdos de nivel de servicio (SLA) y las consecuencia
 
 ## 4. Consumo de eventos sin pérdida (idempotencia)
 
-**SLA:** Si el porcentaje de eventos procesados exactamente una vez cae por debajo de 99.9% en un mes, se documenta como incidente crítico, dado que compromete la integridad de los saldos.
+**SLA:** Si el porcentaje de eventos procesados exactamente una vez cae por debajo de 99.999% en un mes, se documenta como incidente crítico, dado que compromete la integridad de los saldos.
 
 ## Notas generales
 

@@ -12,6 +12,7 @@ spec:
           image: bank-usac/transaction-service:local
           imagePullPolicy: IfNotPresent
           ports: [{containerPort: 3003}]
+          envFrom: [{ configMapRef: { name: bank-app-info } }]
           env:
             - { name: PORT, value: "3003" }
             - { name: DB_HOST, valueFrom: { configMapKeyRef: { name: bank-db-config, key: TRANSACTION_DB_HOST } } }

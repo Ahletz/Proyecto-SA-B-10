@@ -12,6 +12,7 @@ spec:
           image: bank-usac/payment-service:local
           imagePullPolicy: IfNotPresent
           ports: [{containerPort: 3005}]
+          envFrom: [{ configMapRef: { name: bank-app-info } }]
           env:
             - { name: PORT, value: "3005" }
             - { name: DB_HOST, valueFrom: { configMapKeyRef: { name: bank-db-config, key: PAYMENT_DB_HOST } } }
@@ -23,6 +24,11 @@ spec:
             - { name: RABBITMQ_URL, valueFrom: { secretKeyRef: { name: bank-shared-secret, key: RABBITMQ_URL } } }
             - { name: RABBITMQ_QUEUE, value: "payment-service.events" }
             - { name: PAYMENT_MAX_AMOUNT, value: "1000000" }
+            # --- Interbancario (Fase 3). Sin INTERBANK_BANK_CODE el módulo queda inerte ---
+            - { name: ACCOUNT_SERVICE_URL, value: "http://account-service:3004" }
+            - { name: INTERBANK_BANK_CODE, valueFrom: { secretKeyRef: { name: bank-interbank-secret, key: INTERBANK_BANK_CODE, optional: true } } }
+            - { name: INTERBANK_PARTNERS, valueFrom: { secretKeyRef: { name: bank-interbank-secret, key: INTERBANK_PARTNERS, optional: true } } }
+            - { name: ADMIN_TOKEN, valueFrom: { secretKeyRef: { name: bank-interbank-secret, key: ADMIN_TOKEN, optional: true } } }
           readinessProbe: { httpGet: { path: /health, port: 3005 }, initialDelaySeconds: 5, periodSeconds: 5 }
           livenessProbe: { httpGet: { path: /health, port: 3005 }, periodSeconds: 10, failureThreshold: 3 }
           # Hasta 150 s para arrancar (espera a RabbitMQ y la DB); mientras tanto no corre la liveness.

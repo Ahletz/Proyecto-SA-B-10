@@ -12,6 +12,7 @@ spec:
           image: bank-usac/api-gateway:local
           imagePullPolicy: IfNotPresent
           ports: [{ containerPort: 8080 }]
+          envFrom: [{ configMapRef: { name: bank-app-info } }]
           env:
             - { name: PORT, value: "8080" }
             - { name: JWT_SECRET, valueFrom: { secretKeyRef: { name: bank-shared-secret, key: JWT_SECRET } } }
