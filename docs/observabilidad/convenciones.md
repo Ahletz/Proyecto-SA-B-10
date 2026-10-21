@@ -87,6 +87,7 @@ Todo el stack vive bajo `observability/` y se despliega con `kubectl apply -k ob
 | Qué | Ruta |
 |---|---|
 | Manifiestos (Collector, Prometheus, kube-state-metrics, Tempo, Loki, Grafana) | `observability/k8s/` |
+| Agente de logs (DaemonSet: lee los logs de los contenedores de `prod`/`dev` y los envía a Loki con `service_name`, `traceId` y `correlation_id`) | `observability/k8s/otel-logs-agent.yaml` |
 | Dashboards (JSON) | `observability/dashboards/` |
 | Reglas de alerta (YAML) | `observability/alerts/` |
 | Runbooks, uno por alerta | `observability/runbooks/` |
