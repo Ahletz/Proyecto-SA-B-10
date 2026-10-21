@@ -23,6 +23,8 @@ spec:
             - { name: PAYMENT_SERVICE_URL, value: "http://payment-service:3005" }
             - { name: NOTIFICATION_SERVICE_URL, value: "http://notification-audit-service:8082" }
             # API key de cada banco pareja ({"BANKnn":"clave"}); el Secret se crea fuera del repo.
+            # Mismo ADMIN_TOKEN que Payment: el Gateway lo agrega en /api/admin/payment-simulation.
+            - { name: PAYMENT_ADMIN_TOKEN, valueFrom: { secretKeyRef: { name: bank-interbank-secret, key: ADMIN_TOKEN, optional: true } } }
             - { name: INTERBANK_API_KEYS, valueFrom: { secretKeyRef: { name: gateway-interbank-keys, key: INTERBANK_API_KEYS, optional: true } } }
           resources: { requests: { cpu: 100m, memory: 96Mi }, limits: { cpu: 500m, memory: 256Mi } }
           readinessProbe: { httpGet: { path: /health, port: 8080 }, initialDelaySeconds: 5, periodSeconds: 5 }
