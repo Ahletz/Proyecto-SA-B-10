@@ -18,6 +18,7 @@ components:
 patches:
   - path: db-config.yaml
   - path: app-info.yaml
+  - path: payment-simulation.yaml
   - path: gateway-service.yaml
   - patch: |-
       $patch: delete

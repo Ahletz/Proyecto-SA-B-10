@@ -1,0 +1,15 @@
+# En prod la simulación de fallos de Payment arranca apagada: con los valores por defecto de la
+# Fase 2 (10 % fallos + 5 % timeouts) la línea base consumía siempre el presupuesto de error del
+# SLO (99.9 %) y las alertas de burn rate no distinguían un incidente de lo normal. Los escenarios
+# de fallo la activan en caliente con /api/admin/payment-simulation (docs/pruebas/escenarios-de-fallo.md).
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: payment-service, namespace: bank-usac }
+spec:
+  template:
+    spec:
+      containers:
+        - name: payment-service
+          env:
+            - { name: PAYMENT_SIMULATE_FAILURE_RATE, value: "0" }
+            - { name: PAYMENT_SIMULATE_TIMEOUT_RATE, value: "0" }
