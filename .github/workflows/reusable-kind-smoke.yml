@@ -75,7 +75,11 @@ jobs:
       - name: Set image versions
         working-directory: k8s/overlays/dev
         run: |
-          curl -fsSL https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh | bash -s -- 5.8.1 "$RUNNER_TEMP"
+          # Binario fijo descargado de la página de releases. install_kustomize.sh consultaba la API de GitHub
+          # sin autenticar y, con muchos runs seguidos, fallaba por rate limit ("Github rate-limiter failed").
+          curl -fsSL --retry 3 --retry-delay 5 \
+            "https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2Fv5.8.1/kustomize_v5.8.1_linux_amd64.tar.gz" \
+            | tar -xz -C "$RUNNER_TEMP" kustomize
           for s in $SERVICES; do
             "$RUNNER_TEMP/kustomize" edit set image "bank-usac/$s=$PREFIX/$s:$TAG"
           done
@@ -91,6 +95,17 @@ jobs:
             kubectl -n dev rollout status "deployment/$d" --timeout=300s
           done
           kubectl -n dev get pods -o wide
+
+      # Que cada rollout termine no garantiza que el sistema esté listo: con 9 deployments y OTel en el
+      # runner, Customer o Account podían seguir arrancando o reiniciarse y el registro daba 500.
+      # /health/ready del Gateway responde 200 solo cuando los 5 servicios responden.
+      - name: Wait for all services ready
+        run: |
+          for i in $(seq 1 36); do
+            if curl -fsS http://localhost:30080/health/ready; then echo; exit 0; fi
+            echo " (intento $i/36, se reintenta en 5 s)"; sleep 5
+          done
+          echo "::error::El Gateway no reportó READY en 3 minutos"; exit 1
 
       - name: Smoke test
         run: API_BASE=http://localhost:30080 tests/e2e/smoke.sh

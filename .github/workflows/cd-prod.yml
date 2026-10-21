@@ -104,7 +104,11 @@ jobs:
           PREFIX: ${{ steps.v.outputs.prefix }}
           VERSION: ${{ steps.v.outputs.version }}
         run: |
-          curl -fsSL https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh | bash -s -- 5.8.1 "$RUNNER_TEMP"
+          # Binario fijo descargado de la página de releases. install_kustomize.sh consultaba la API de GitHub
+          # sin autenticar y, con muchos runs seguidos, fallaba por rate limit ("Github rate-limiter failed").
+          curl -fsSL --retry 3 --retry-delay 5 \
+            "https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2Fv5.8.1/kustomize_v5.8.1_linux_amd64.tar.gz" \
+            | tar -xz -C "$RUNNER_TEMP" kustomize
           for s in $SERVICES; do
             "$RUNNER_TEMP/kustomize" edit set image "bank-usac/$s=$PREFIX/$s:$VERSION"
           done
