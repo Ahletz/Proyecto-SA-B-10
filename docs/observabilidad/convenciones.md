@@ -58,7 +58,7 @@ Campos de detalle (`accountId`, `transactionId`, `interbankTransferId`, etc.) va
   - Mensajería: `publish <routing key>` y `process <routing key>`, por ejemplo `publish account.reserved`.
   - Lógica de negocio: `<dominio>.<operación>`, por ejemplo `account.reserve`, `payment.simulate`, `transaction.saga.start`, `interbank.send`.
   - HTTP: los genera la instrumentación automática.
-- **Atributos de negocio** con prefijo `bank.`: `bank.transaction.id`, `bank.account.id`, `bank.interbank.transfer_id`, `bank.interbank.state`, `bank.operation.outcome`. En trazas sí se permiten identificadores; nunca datos personales.
+- **Atributos de negocio** con prefijo `bank.`: `bank.correlation_id`, `bank.transaction.id`, `bank.transaction.state`, `bank.transaction.public_state`, `bank.transaction.failure_reason`, `bank.interbank.state`, `bank.event.type` y `bank.operation.outcome`. En trazas sí se permiten identificadores; nunca datos personales. El id del depósito interbancario es el mismo `bank.transaction.id` (`interbankTransferId` = `transactionId`).
 - El estado de la Saga (`PENDING`, `APPROVED`, `FAILED`, `SENT`, `REVERSED`, ...) se registra como evento del span o atributo, y las compensaciones deben verse como spans.
 
 ## 4. Métricas
