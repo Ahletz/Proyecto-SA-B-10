@@ -1,8 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 import { AccountService } from './account.service';
+import { AccountEntity } from './account.entity';
+import { ReservationEntity } from './reservation.entity';
 
 function fakeRepo(overrides: Partial<Record<string, any>> = {}) {
-  return {
+  const repo: any = {
     create: vi.fn((x: any) => x),
     save: vi.fn(async (x: any) => x),
     find: vi.fn(async () => []),
@@ -12,6 +14,9 @@ function fakeRepo(overrides: Partial<Record<string, any>> = {}) {
     createQueryBuilder: vi.fn(),
     ...overrides,
   };
+  // findOne({ where, lock }) del servicio usa lo que cada prueba simula con findOneBy / findOneByOrFail.
+  repo.findOne ??= vi.fn(async ({ where }: any) => (await repo.findOneBy(where)) ?? (await repo.findOneByOrFail(where).catch(() => null)));
+  return repo;
 }
 
 function makeService(overrides: { accounts?: any; reservations?: any; processed?: any } = {}) {
@@ -19,6 +24,10 @@ function makeService(overrides: { accounts?: any; reservations?: any; processed?
   const reservations = overrides.reservations ?? fakeRepo();
   const processed = overrides.processed ?? fakeRepo();
   const rabbit = { publish: vi.fn(async () => undefined) };
+  // Las transacciones (con filas bloqueadas) se simulan entregando los mismos repositorios falsos.
+  accounts.manager = {
+    transaction: async (fn: any) => fn({ getRepository: (e: unknown) => (e === AccountEntity ? accounts : e === ReservationEntity ? reservations : processed) }),
+  };
   const service = new AccountService(accounts, reservations, processed, rabbit as any);
   return { service, accounts, reservations, processed, rabbit };
 }

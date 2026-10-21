@@ -56,6 +56,14 @@ import { TransactionModule } from './transaction/transaction.module';
 
         autoLoadEntities: true,
 
+        // Pool por réplica: Cloud SQL db-f1-micro admite ~25 conexiones y el HPA
+        // llega a 5 réplicas (5 x 4 = 20). Con el default de 10 se agotaban.
+        extra: {
+          max: Number(
+            configService.get<string>('DB_POOL_MAX', '4'),
+          ),
+        },
+
         synchronize:
           configService.get<string>(
             'DB_SYNCHRONIZE',
