@@ -49,6 +49,16 @@ interface InterbankResultPayload {
   reasonCode?: string;
 }
 
+// Account ya acreditó un depósito recibido de otro banco
+// (docs/interbank/diseno-interbancario.md §4).
+interface InterbankDepositCreditedPayload {
+  interbankTransferId: string;
+  accountId: string;
+  amount: number;
+  originBankCode?: string | null;
+  originAccount?: string | null;
+}
+
 // Contrato Fase 2 (sección 2.2): lo publica Customer Service.
 interface KycStatusChangedPayload {
   customerId: string;
@@ -61,7 +71,8 @@ type TransactionEventPayload =
   | TransactionReferencePayload
   | KycStatusChangedPayload
   | InterbankRequestedPayload
-  | InterbankResultPayload;
+  | InterbankResultPayload
+  | InterbankDepositCreditedPayload;
 
 export const KYC_NOT_VERIFIED = 'KYC_NOT_VERIFIED';
 export const AMOUNT_LIMIT_EXCEEDED = 'AMOUNT_LIMIT_EXCEEDED';
@@ -178,6 +189,8 @@ export class TransactionEventsConsumer
         'interbank.transfer.reversed',
         'account.interbank.transfer.completed',
         'account.interbank.funds.released',
+
+        'account.interbank.deposit.credited',
       ],
       async (message) => {
         await this.handleMessage(message);
@@ -354,6 +367,12 @@ export class TransactionEventsConsumer
         await this.handleInterbankSettled(
           event as BankEvent<InterbankResultPayload>,
           TransactionStatus.COMPENSATED,
+        );
+        break;
+
+      case 'account.interbank.deposit.credited':
+        await this.handleInterbankDepositCredited(
+          event as BankEvent<InterbankDepositCreditedPayload>,
         );
         break;
 
@@ -618,6 +637,48 @@ export class TransactionEventsConsumer
           event.eventId,
         );
     }
+  }
+
+  /**
+   * Depósito recibido de otro banco: no abre Saga (Payment y Account ya lo
+   * resolvieron); solo queda registrado para el historial de la cuenta.
+   */
+  private async handleInterbankDepositCredited(
+    event: BankEvent<InterbankDepositCreditedPayload>,
+  ): Promise<void> {
+    const p = event.payload;
+
+    if (!p.accountId) {
+      throw new Error(
+        'accountId is required',
+      );
+    }
+
+    if (
+      typeof p.amount !== 'number' ||
+      p.amount <= 0
+    ) {
+      throw new Error(
+        'amount must be greater than zero',
+      );
+    }
+
+    const { transaction, created } =
+      await this.createTransactionService
+        .recordIncomingInterbank({
+          originBankCode: p.originBankCode ?? null,
+          originAccount: p.originAccount ?? null,
+          accountId: p.accountId,
+          amount: p.amount,
+          correlationId: event.correlationId,
+        });
+
+    this.logger.log(
+      `Incoming interbank deposit ${p.interbankTransferId} ` +
+        (created
+          ? `recorded as ${transaction.transactionId}`
+          : `already recorded as ${transaction.transactionId}`),
+    );
   }
 
   private async handleKycStatusChanged(

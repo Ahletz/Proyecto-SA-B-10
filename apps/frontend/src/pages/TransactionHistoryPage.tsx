@@ -258,6 +258,15 @@ export function TransactionHistoryPage(){
                         ?item.targetAccount
                         :item.sourceAccount
                     }/>
+                    {(item.direction==='OUTGOING'
+                      ?item.destinationBankCode
+                      :item.originBankCode)&&(
+                      <div className="muted tx-reason">
+                        {item.direction==='OUTGOING'
+                          ?item.destinationBankCode
+                          :item.originBankCode}
+                      </div>
+                    )}
                   </td>
                   <td className={`num amount amount-${item.direction.toLowerCase()}`}>
                     {formatAmount(item)}

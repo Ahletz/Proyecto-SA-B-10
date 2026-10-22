@@ -41,7 +41,7 @@ Si después llega un callback `ACCEPTED` para una transferencia ya liberada: inc
 ```
 pareja ─ POST /interbank/v1/transfers ─▶ Gateway ─▶ Payment: valida, 202 PROCESSING (200 si repite, 409 si contenido distinto, 422 si ya venció)
 Payment ─ interbank.deposit.requested ─▶ Account: valida y acredita en UNA transacción
-Account ─ account.interbank.deposit.credited | .rejected ─▶ Payment
+Account ─ account.interbank.deposit.credited | .rejected ─▶ Payment (y .credited ─▶ Transaction, solo para el historial)
 Payment ─ POST {pareja}/transfers/{id}/result ─▶ callback con espera creciente 2 s, 4 s, 8 s… hasta 24 h
 ```
 
@@ -64,7 +64,7 @@ Account **nunca acredita** un mensaje vencido (`EXPIRED`, aunque llegue por rein
 | `account.interbank.transfer.completed` | Account | **Transaction** | `transactionId`, `interbankTransferId`, `sourceAccount`, `amount`, `fee` |
 | `account.interbank.funds.released` | Account | **Transaction** | `transactionId`, `interbankTransferId`, `amount`, `fee`, `reason` |
 | `interbank.deposit.requested` | Payment | Account | `interbankTransferId`, `originBankCode`, `destinationAccount`, `amount` ("150.00"), `currency`, `expiresAt` |
-| `account.interbank.deposit.credited` / `.rejected` | Account | Payment | `interbankTransferId` (+ `reasonCode`, `reasonMessage`) |
+| `account.interbank.deposit.credited` / `.rejected` | Account | Payment; `.credited` también Transaction | `interbankTransferId` (+ `reasonCode`, `reasonMessage`); `.credited` lleva además `accountId`, `amount`, `originBankCode` y `originAccount` |
 | `interbank.reversal.requested` | Payment | Account | `reversalId`, `originalTransferId`, `amount` |
 | `account.interbank.reversal.debited` / `.failed` | Account | Payment | `reversalId`, `originalTransferId` (+ `accountId`, `amount` / `reason`) |
 

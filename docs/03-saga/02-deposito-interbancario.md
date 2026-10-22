@@ -47,6 +47,7 @@ Fuente: [`sequence-interbank-incoming.mmd`](../01-arquitectura/c4-src/sequence-i
   - el mismo id con otro contenido responde `409`;
   - un depósito vencido responde `422`.
 - Account acredita en una sola transacción y nunca acredita un depósito vencido o cancelado.
+- Transaction escucha `account.interbank.deposit.credited` y guarda el depósito como `COMPLETED` / `ACCEPTED`, con `originBankCode` y la cuenta de origen. Así el cliente lo ve como *Recibida* en su historial. Es solo un registro: si Transaction falla, el crédito y el callback al otro banco no se ven afectados.
 - **Verificado en prod** con el mock: crédito de Q10. El reenvío idéntico respondió 200 sin doble crédito, el mismo id con otro monto respondió 409, y el `traceId` fue el mismo en el mock y en Payment.
 
 ## Observabilidad del flujo
