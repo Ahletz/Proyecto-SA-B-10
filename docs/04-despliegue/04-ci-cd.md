@@ -1,4 +1,4 @@
-# CI/CD — Fase 2
+# CI/CD
 
 Pipeline en GitHub Actions que sigue la convención de ramas y tags del enunciado. Las imágenes se publican en **GitHub Container Registry (GHCR)** como `ghcr.io/<owner>/bank-usac/<servicio>:<tag>` y **nunca** se usa el tag `latest`.
 
@@ -8,9 +8,10 @@ Pipeline en GitHub Actions que sigue la convención de ramas y tags del enunciad
 | ------ | -------- | -------- |
 | Push a `feature/**` | `integrante1-ci.yml`, `integrante2-ci.yml`, `integrante3-ci.yml` | Build + test (+ lint) de los servicios que cambiaron, prueba de `docker build` y validación de manifiestos |
 | Pull request `feature/*` → `develop` | Los mismos | Repite build + test; si pasa, se puede hacer merge |
-| Merge a `develop` | `cd-dev.yml` | Construye solo las imágenes de los servicios que cambiaron, reutiliza las demás (ver [Build selectivo](#build-selectivo-monorepo)), publica las 7 con tag `sha-<commit>`, las despliega en el namespace `dev` y corre el smoke test end-to-end |
+| Merge a `develop` | `cd-dev.yml` | Construye solo las imágenes de los servicios que cambiaron, reutiliza las demás (ver [Build selectivo](#build-selectivo-monorepo)), publica las 8 con tag `sha-<commit>`, las despliega en el namespace `dev` y corre el smoke test end-to-end |
 | Push a `release/X.Y.Z` | `release.yml` | Publica imágenes candidatas, las valida con el smoke test y solo entonces publica las imágenes finales `vX.Y.Z` y crea el tag git `vX.Y.Z` |
-| Merge a `main` | `cd-prod.yml` | Despliega en GKE (namespace `prod`) las imágenes `vX.Y.Z` del último tag, con rolling update. Se omite mientras no exista el cluster (`vars.GKE_CLUSTER`) |
+| Merge a `main` | `cd-prod.yml` | Despliega en GKE (namespace `prod`) las imágenes `vX.Y.Z` del último tag, con rolling update, y publica el frontend en Cloud Run |
+| Push a `develop` o `main` que toque `observability/` | `deploy-observability.yml` | Despliega el stack de observabilidad en el namespace `observability` (ver [Stack de observabilidad](#stack-de-observabilidad)) |
 
 ### Workflows
 
@@ -18,11 +19,12 @@ Pipeline en GitHub Actions que sigue la convención de ramas y tags del enunciad
 | ------- | ---- | --- |
 | `integrante1-ci.yml` | CI | Customer, Notification & Audit y Frontend |
 | `integrante2-ci.yml` | CI | Account y Payment (NestJS) |
-| `integrante3-ci.yml` | CI | Transaction, API Gateway y manifiestos `k8s/` |
+| `integrante3-ci.yml` | CI | Transaction, API Gateway, simulador `interbank-mock` y manifiestos `k8s/` |
 | `reusable-node-ci.yml` | Reutilizable | Build + test (+ lint) de un servicio Node/NestJS |
 | `cd-dev.yml` | CD | Imágenes `sha-<commit>` + despliegue en `dev` |
 | `release.yml` | CD | Imágenes `vX.Y.Z` + tag git |
 | `cd-prod.yml` | CD | Despliegue en GKE (namespace `prod`) |
+| `deploy-observability.yml` | CD | Stack de observabilidad en GKE (namespace `observability`) |
 | `reusable-kind-smoke.yml` | Reutilizable | Cluster kind efímero + overlay `dev` + smoke test (lo usan `cd-dev.yml` y `release.yml`) |
 
 ## CI por integrante
@@ -44,7 +46,7 @@ El workflow reutilizable instala con `npm ci`, ejecuta lint/test según los inpu
 
 En `integrante1-ci.yml`, el job de Frontend corre `type-check`, `lint` (ESLint con `--max-warnings 0`: cualquier aviso falla el job), `test` (Vitest: filtros del historial, mapeo de estados de la Saga y manejo de errores del cliente HTTP) y `build`.
 
-`integrante2-ci.yml` cubre Account y Payment con el mismo workflow reutilizable (NestJS). `integrante3-ci.yml` cubre Transaction Service, API Gateway y los manifiestos de `k8s/`. Los overlays `dev` y `prod` se renderizan con Kustomize, se validan con kubeconform y se rechaza cualquier imagen `:latest`.
+`integrante2-ci.yml` cubre Account y Payment con el mismo workflow reutilizable (NestJS). `integrante3-ci.yml` cubre Transaction Service, API Gateway, el simulador `interbank-mock` y los manifiestos de `k8s/`. Los overlays `dev` y `prod` se renderizan con Kustomize, se validan con kubeconform y se rechaza cualquier imagen `:latest`.
 
 **Optimización del pipeline:**
 - Caché de dependencias: `actions/setup-node` (`cache: npm`, por `package-lock.json`) y `actions/setup-java` (`cache: maven`, por `pom.xml`).
@@ -63,13 +65,13 @@ k8s/
 ├── base/                          # agrupa config, broker y todos los servicios
 ├── components/autoscaling/        # CPU requests/limits, rolling update, HPA 80 %
 ├── overlays/dev/                  # namespace dev + versión de imágenes
-└── overlays/prod/                 # namespace prod, Cloud SQL, Gateway LoadBalancer, sin frontend
+└── overlays/prod/                 # namespace prod, Cloud SQL, Gateway LoadBalancer + Ingress HTTPS, sin frontend
 ```
 
 - **Local (`scripts/project/start-k8s.sh`)** aplica los `deployment.yaml` y `config/` directamente en el namespace `bank-usac`, con imágenes `:local`.
 - **`overlays/dev`** reutiliza la base y la despliega en el namespace `dev` con el componente de autoscaling. El pipeline fija el tag de cada imagen con `kustomize edit set image`.
-- **Configuración de DB:** host, puerto, nombre y usuario de cada base están en el ConfigMap `bank-db-config` y las contraseñas en el Secret `bank-db-secret`, con los nombres de variable de la sección 2.4 del plan (`TRANSACTION_DB_HOST`, …). En producción estos valores vendrán de los outputs de Terraform.
-- **Probes HTTP:** los 7 Deployments tienen `readinessProbe` y `livenessProbe`. Los servicios Node usan `/health` y los Spring Boot (Customer, Notification & Audit) `/actuator/health` y `/actuator/health/liveness`; el frontend usa `/`. Los seis servicios de backend tienen además `startupProbe` (150 s en Node, 180 s en Spring Boot) para esperar a RabbitMQ y la DB. Si un servicio Node pierde la conexión con RabbitMQ, el proceso termina y Kubernetes lo reinicia.
+- **Configuración de DB:** host, puerto, nombre y usuario de cada base están en el ConfigMap `bank-db-config` y las contraseñas en el Secret `bank-db-secret`, con los nombres de variable de la sección 2.4 del plan (`TRANSACTION_DB_HOST`, …). En producción los hosts salen de los outputs de Terraform.
+- **Probes HTTP:** todos los Deployments tienen `readinessProbe` y `livenessProbe`. Los servicios Node usan `/health` y los Spring Boot (Customer, Notification & Audit) `/actuator/health` y `/actuator/health/liveness`; el frontend usa `/`. Los servicios de backend tienen además `startupProbe` (150 s en Node, 180 s en Spring Boot) para esperar a RabbitMQ y la DB. Si un servicio Node pierde la conexión con RabbitMQ, el proceso termina y Kubernetes lo reinicia.
 - **Recursos:** todos los contenedores tienen requests y limits de CPU y memoria, ajustados al uso medido con `docker stats` después del smoke test:
 
   | Contenedor | Requests | Limits |
@@ -81,7 +83,8 @@ k8s/
 
   Los servicios Spring Boot llevan `JAVA_TOOL_OPTIONS=-XX:MaxRAMPercentage=70`: la JVM limita el heap a ~537 MiB y deja margen para metaspace e hilos dentro de los 768 MiB. RabbitMQ tiene 1Gi de límite porque su alarma de memoria bloquea a los publicadores al 40 % del límite. Los valores de los cinco microservicios están en `components/autoscaling` (`resources-node.yaml`, `resources-spring.yaml`); los de Gateway, RabbitMQ, MailHog y frontend, en su `deployment.yaml`.
 - **Rolling update sin cortes:** los cinco microservicios y el Gateway tienen `preStop: sleep 10 s` (`components/autoscaling/prestop-patch.yaml`). Al terminar un pod, Kubernetes lo saca del Service y le manda SIGTERM a la vez; la pausa deja que kube-proxy y el LoadBalancer dejen de enviarle tráfico antes de que cierre conexiones. Medido en kind reiniciando los 6 deployments con el Gateway consultado cada 0.2 s: sin `preStop` 4 respuestas 503 de 701; con `preStop` 1 de 724.
-- **Autoscaling:** los cinco microservicios tienen `RollingUpdate` con `maxUnavailable: 0` / `maxSurge: 1` y un HPA (`minReplicas: 1`, `maxReplicas: 5`, 80 % de CPU). Los HPA de los servicios Spring Boot (Customer, Notification & Audit) tienen `scaleUp.stabilizationWindowSeconds: 120` para no escalar por el pico de CPU del arranque. El HPA necesita `metrics-server` en el cluster; ver la [prueba de carga](06-prueba-hpa.md).
+- **Autoscaling:** los cinco microservicios tienen `RollingUpdate` con `maxUnavailable: 0` / `maxSurge: 1` y un HPA (`minReplicas: 1`, `maxReplicas: 5`, 80 % de CPU). Los HPA de los servicios Spring Boot (Customer, Notification & Audit) tienen `scaleUp.stabilizationWindowSeconds: 120` para no escalar por el pico de CPU del arranque. El API Gateway tiene su propio HPA de 1 a 3 réplicas y sondas con `timeoutSeconds: 3`. El HPA necesita `metrics-server` en el cluster; ver la [prueba de carga](06-prueba-hpa.md).
+- **Conexiones a la base:** cada réplica abre como máximo 4 conexiones (`DB_POOL_MAX` en Node, `SPRING_DATASOURCE_HIKARI_MAXIMUMPOOLSIZE` en Spring Boot). Regla: réplicas máximas del HPA × pool ≤ conexiones que admite la base (5 × 4 = 20 frente a unas 25 de `db-f1-micro`). Ver el [postmortem de estrés](../postmortems/2026-10-21-estres-account-concurrencia.md).
 
 Renderizar el ambiente dev localmente:
 
@@ -102,8 +105,9 @@ Todo el sistema vive en un solo repositorio. Cada microservicio tiene su código
 | Payment | `apps/payment-service/` | `k8s/payment-service/` | `integrante2-ci.yml` → job `payment-service` |
 | Transaction | `apps/transaction-service/` | `k8s/transaction-service/` | `integrante3-ci.yml` → job `transaction-service` |
 | API Gateway | `apps/api-gateway/` | `k8s/api-gateway/` | `integrante3-ci.yml` → job `api-gateway` |
+| Simulador interbancario (BANK99) | `apps/interbank-mock/` | `k8s/interbank-mock/` | `integrante3-ci.yml` → job `interbank-mock` |
 
-Lo compartido va aparte: `k8s/{config,broker,base,components,overlays}` (configuración común, RabbitMQ y ambientes), `infrastructure/` (Docker Compose local, SQL de cada base y Terraform), `tests/` (E2E y carga) y `scripts/` (arranque local).
+Lo compartido va aparte: `k8s/{config,broker,base,components,overlays}` (configuración común, RabbitMQ y ambientes), `observability/` (stack de observabilidad, dashboards y alertas), `infrastructure/` (Docker Compose local, SQL de cada base y Terraform), `tests/` (E2E y carga) y `scripts/` (arranque local).
 
 **Por qué los manifiestos van en `k8s/<servicio>/` y no dentro de `apps/<servicio>/`:** separa lo que se construye (código e imagen) de cómo se despliega. Toda la configuración de Kubernetes queda en un solo árbol: `k8s/base` agrupa los servicios, los overlays `dev`/`prod` los reutilizan sin copiarlos, `scripts/project/start-k8s.sh` los aplica en local y el job `k8s-manifests` de `integrante3-ci.yml` valida todo con un solo filtro (`k8s/**`). Cada servicio sigue teniendo su propio directorio de manifiestos.
 
@@ -123,20 +127,20 @@ En `cd-dev.yml`:
 1. `plan` arma dos listas: servicios a **construir** (cambió su carpeta, o no existe su imagen `sha-<commit anterior>`) y servicios a **reutilizar**. Con `workflow_dispatch` o en el primer push se construye todo. El resumen del run muestra ambas listas.
 2. `images` construye solo la primera lista (matriz dinámica).
 3. `reuse-images` copia la imagen anterior al tag nuevo con `docker buildx imagetools create`: no recompila y conserva el mismo digest.
-4. `deploy-dev` corre si ninguno de los anteriores falló. Cada commit sigue teniendo las 7 imágenes con el mismo tag, así que el smoke test en kind despliega el sistema completo; los servicios reutilizados solo se descargan.
+4. `deploy-dev` corre si ninguno de los anteriores falló. Cada commit sigue teniendo las 8 imágenes con el mismo tag, así que el smoke test en kind despliega el sistema completo; los servicios reutilizados solo se descargan.
 
-`release.yml` construye siempre los 7 servicios: una versión `vX.Y.Z` etiqueta el sistema completo.
+`release.yml` construye siempre las 8 imágenes: una versión `vX.Y.Z` etiqueta el sistema completo.
 
 ## Ambiente dev
 
-Mientras no exista un cluster persistente, `reusable-kind-smoke.yml` crea un cluster **kind efímero** en el runner. Las cinco PostgreSQL se levantan con Docker Compose **fuera del cluster**, igual que en local. Luego el workflow carga las imágenes publicadas, instala `metrics-server`, aplica `overlays/dev`, espera los rollouts, ejecuta `tests/e2e/smoke.sh` contra el Gateway (`:30080`) y muestra el estado de los HPA. Si algo falla, el job imprime pods y logs.
+`dev` no tiene un cluster persistente: `reusable-kind-smoke.yml` crea un cluster **kind efímero** en el runner. Las cinco PostgreSQL se levantan con Docker Compose **fuera del cluster**, igual que en local. Luego el workflow carga las imágenes publicadas, instala `metrics-server`, aplica `overlays/dev`, espera los rollouts, ejecuta `tests/e2e/smoke.sh` contra el Gateway (`:30080`) y muestra el estado de los HPA. Si algo falla, el job imprime pods y logs.
 
 ## Releases
 
-1. Crear la rama `release/X.Y.Z` desde `develop` (por ejemplo `release/2.0.0`) y hacer push.
+1. Crear la rama `release/X.Y.Z` desde `develop` (por ejemplo `release/0.5.7`) y hacer push.
 2. `release.yml` ejecuta, en orden:
    1. **version:** valida que la rama se llame `release/X.Y.Z` y que el tag `vX.Y.Z` no exista.
-   2. **images:** construye y publica las 7 imágenes candidatas `:vX.Y.Z-rc.<n>` (`n` = número de ejecución del workflow).
+   2. **images:** construye y publica las 8 imágenes candidatas `:vX.Y.Z-rc.<n>` (`n` = número de ejecución del workflow).
    3. **smoke:** despliega las candidatas en kind y corre el smoke test (`reusable-kind-smoke.yml`).
    4. **promote:** copia cada candidata a `:vX.Y.Z` con `docker buildx imagetools create`. No recompila: la imagen final tiene el mismo digest que la que pasó el smoke test.
    5. **tag:** crea y publica el tag git `vX.Y.Z` sobre el commit de la rama.
@@ -151,9 +155,11 @@ El frontend de la release se compila sin URL del Gateway (`VITE_API_BASE_URL` va
 
 - Imágenes `ghcr.io/<owner>/bank-usac/<servicio>:vX.Y.Z`; `cd-prod.yml` fija la versión con `kustomize edit set image`.
 - Bases de datos en Cloud SQL por IP privada, puerto 5432 y los nombres de `infrastructure/terraform/cloudsql.tf`. Los hosts salen de `terraform output -json db_private_ips` y el Secret `bank-db-secret` lo crea el workflow; en git no hay credenciales.
-- El Gateway se publica con un Service `LoadBalancer`. El frontend no corre en el cluster: va en **Cloud Run** (`bank-usac-frontend`), con nginx sirviendo la SPA por HTTPS y reenviando `/api` al LoadBalancer del Gateway (`API_UPSTREAM`).
+- El Gateway se publica con un Service `LoadBalancer` (destino del proxy del frontend) y, para el banco pareja, con un Ingress HTTPS (`gateway-ingress.yaml`, `ManagedCertificate` e IP global estática de Terraform): `https://35-244-157-47.sslip.io/interbank/v1`.
+- Los Secrets interbancarios (`bank-interbank-secret`, `gateway-interbank-keys`, `interbank-mock-secret`) se crean a mano, fuera del repositorio; ver [Despliegue](07-despliegue-fase3.md#secrets-fuera-del-repositorio).
+- El frontend no corre en el cluster: va en **Cloud Run** (`bank-usac-frontend`), con nginx sirviendo la SPA por HTTPS y reenviando `/api` al LoadBalancer del Gateway (`API_UPSTREAM`).
 
-`cd-prod.yml` (merge a `main`): toma el último tag `vX.Y.Z` alcanzable desde `main`, verifica que las 7 imágenes existan en GHCR, se autentica en GCP, crea el namespace, el Secret de DB y el acceso a GHCR (`ghcr-pull`), aplica el overlay y espera cada rollout. Después publica el frontend: copia `frontend:vX.Y.Z` de GHCR a Artifact Registry (Cloud Run no descarga de GHCR; mismo tag, sin recompilar), lee la IP del LoadBalancer del Gateway y hace `gcloud run deploy` con `API_UPSTREAM=http://<IP>:8080`. Cloud Run crea una revisión nueva y mueve el tráfico cuando está lista. Al final comprueba que la SPA responda y que `/api/accounts` devuelva 401 (el proxy llega al Gateway), y deja las dos URL en el resumen del run. Si algo falla, imprime pods y logs.
+`cd-prod.yml` (merge a `main`): toma el último tag `vX.Y.Z` alcanzable desde `main`, verifica que las 8 imágenes existan en GHCR, se autentica en GCP, crea el namespace, el Secret de DB y el acceso a GHCR (`ghcr-pull`), aplica el overlay y espera cada rollout. Después publica el frontend: copia `frontend:vX.Y.Z` de GHCR a Artifact Registry (Cloud Run no descarga de GHCR; mismo tag, sin recompilar), lee la IP del LoadBalancer del Gateway y hace `gcloud run deploy` con `API_UPSTREAM=http://<IP>:8080`. Cloud Run crea una revisión nueva y mueve el tráfico cuando está lista. Al final comprueba que la SPA responda y que `/api/accounts` devuelva 401 (el proxy llega al Gateway), y deja las dos URL en el resumen del run. Si algo falla, imprime pods y logs.
 
 Configuración del repositorio (Settings → Secrets and variables → Actions):
 
@@ -162,6 +168,7 @@ Configuración del repositorio (Settings → Secrets and variables → Actions):
 | Secret | `GCP_SA_KEY` | JSON de una service account con rol Kubernetes Engine Developer |
 | Secret | `PROD_DB_PASSWORD` | `db_password` de Terraform |
 | Secret | `GHCR_PULL_TOKEN` | Token con `read:packages` para que GKE descargue las imágenes |
+| Secret | `GRAFANA_ADMIN_PASSWORD` | Contraseña del usuario `admin` de Grafana (`deploy-observability.yml`) |
 | Variable | `GKE_CLUSTER` / `GKE_LOCATION` | Nombre y zona del cluster |
 | Variable | `PROD_DB_PRIVATE_IPS` | Salida de `terraform output -json db_private_ips` |
 | Variable | `GAR_REPOSITORY` | Salida de `terraform output -raw frontend_registry` |
@@ -177,10 +184,9 @@ Configuración del repositorio (Settings → Secrets and variables → Actions):
   - Frontend: `gcloud run services update-traffic bank-usac-frontend --region us-central1 --to-revisions <revisión anterior>=100` (las revisiones anteriores se conservan).
   - Definitivo: volver a desplegar la versión anterior (`kustomize edit set image bank-usac/<servicio>=ghcr.io/<owner>/bank-usac/<servicio>:v<anterior>`), y corregir con una `release/X.Y.(Z+1)`.
 
-## Pendiente (depende de la infraestructura de producción)
+## Stack de observabilidad
 
-- `terraform apply` de `frontend.tf` (Artifact Registry y permisos de Cloud Run; ver [Terraform](05-terraform-cloud-sql.md)) y las variables `GAR_REPOSITORY` y `FRONTEND_RUN_SA` de la tabla anterior.
-- Primera release (`release/X.Y.Z` → tag → merge a `main`).
+`deploy-observability.yml` corre en cada push a `develop` o `main` que toque `observability/` (o a mano con `workflow_dispatch`). Valida el árbol con `kubectl kustomize`, crea el namespace y el Secret `grafana-admin` desde el secreto `GRAFANA_ADMIN_PASSWORD` de GitHub, aplica `kubectl apply -k observability`, reinicia Prometheus y Grafana para que lean las reglas y dashboards nuevos y espera cada rollout. Así los dashboards (`observability/dashboards/*.json`), las alertas (`observability/alerts/*.yaml`) y el stack (Collector, agente de logs, Prometheus, Tempo, Loki, Grafana y kube-state-metrics) llegan al cluster sin pasos manuales.
 
 ## Configuración del repositorio (una vez, requiere admin)
 

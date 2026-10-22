@@ -20,6 +20,9 @@ export class Transaction {
     // frente al banco pareja; targetAccount es la cuenta en ese banco.
     public readonly destinationBankCode: string | null = null,
     private _interbankState: InterbankState | null = null,
+    // Solo en depósitos interbancarios recibidos: banco de origen (BANKnn);
+    // sourceAccount es la cuenta en ese banco.
+    public readonly originBankCode: string | null = null,
   ) {
     if (!transactionId) {
       throw new Error('transactionId is required');

@@ -1,6 +1,6 @@
-# Terraform — Infraestructura de producción en GCP (Fase 2)
+# Terraform — Infraestructura de producción en GCP
 
-Toda la infraestructura de producción se crea con Terraform desde `infrastructure/terraform/`: red, bases de datos (Cloud SQL), cluster de Kubernetes (GKE) y lo que usa el frontend en Cloud Run (Artifact Registry y permisos). Nada se crea a mano en la consola, salvo el bucket del estado (ver [Estado remoto](#estado-remoto)). Las decisiones y sus trade-offs están en los ADR-009 a ADR-012 de [Decisiones de arquitectura](../01-arquitectura/05-decisiones-arquitectura.md).
+Toda la infraestructura de producción se crea con Terraform desde `infrastructure/terraform/`: red, bases de datos (Cloud SQL), cluster de Kubernetes (GKE), lo que usa el frontend en Cloud Run (Artifact Registry y permisos), la IP fija del Ingress HTTPS del Gateway y el permiso del pipeline de observabilidad. Nada se crea a mano en la consola, salvo el bucket del estado (ver [Estado remoto](#estado-remoto)). Las decisiones y sus trade-offs están en los ADR-009 a ADR-012 de [Decisiones de arquitectura](../01-arquitectura/05-decisiones-arquitectura.md).
 
 ## Qué provisiona
 
@@ -13,12 +13,14 @@ Toda la infraestructura de producción se crea con Terraform desde `infrastructu
 | `cloudsql.tf` | `google_sql_database.database` / `google_sql_user.user` (×5) | Base y usuario de cada servicio (ver [Usuarios y bases de datos](#usuarios-y-bases-de-datos)) |
 | `gke.tf` | `google_project_service.container` | Habilita la API de Kubernetes Engine |
 | `gke.tf` | `google_container_cluster.gke` | Cluster `bank-usac-gke`, Standard **zonal** en `us-central1-a`, en `bank-usac-vpc`, canal `REGULAR`. El node pool por defecto se elimina |
-| `gke.tf` | `google_container_node_pool.primary` | Node pool `bank-usac-pool`: `e2-medium`, disco `pd-standard` de 30 GB, cluster autoscaler de 1 a 3 nodos, auto-repair y auto-upgrade |
+| `gke.tf` | `google_container_node_pool.primary` | Node pool `bank-usac-pool`: `e2-standard-2`, disco `pd-standard` de 30 GB, cluster autoscaler de 2 a 4 nodos, auto-repair y auto-upgrade |
 | `gke.tf` | `google_service_account.github_deployer` + `google_project_iam_member.github_deployer_gke` | Service account `github-deployer` con `roles/container.developer`, que usa `cd-prod.yml` para desplegar |
 | `frontend.tf` | `google_project_service.run` / `.artifactregistry` | Habilita las API de Cloud Run y Artifact Registry |
 | `frontend.tf` | `google_artifact_registry_repository.images` | Repositorio Docker `bank-usac` en `us-central1`, donde `cd-prod.yml` copia `frontend:vX.Y.Z` (Cloud Run no descarga de GHCR) |
 | `frontend.tf` | `google_service_account.frontend_run` | Identidad sin roles con la que corre el servicio Cloud Run `bank-usac-frontend` |
 | `frontend.tf` | IAM de `github-deployer` | `roles/artifactregistry.writer` en el repositorio, `roles/run.admin` y `roles/iam.serviceAccountUser` sobre `frontend-run`, para publicar la imagen y desplegar |
+| `gateway_ip.tf` | `google_compute_global_address.gateway` | IP global fija `bank-usac-gateway-ip` del Ingress HTTPS del Gateway. El certificado administrado se emite para `<ip con guiones>.sslip.io`; si la IP cambiara, el banco pareja perdería la URL |
+| `observability_iam.tf` | `google_project_iam_member.github_deployer_gke_admin` | `roles/container.admin` para `github-deployer`: `deploy-observability.yml` crea los `ClusterRole` de Prometheus y kube-state-metrics, y `roles/container.developer` no alcanza para RBAC |
 
 El cluster va en la **misma VPC** que Cloud SQL porque el peering de Cloud SQL no es transitivo: desde otra VPC no se llegaría a las IP privadas de las bases.
 
@@ -32,8 +34,8 @@ El cluster va en la **misma VPC** que Cloud SQL porque el peering de Cloud SQL n
 | `db_password` | — (**sensible**) | Contraseña de los 5 usuarios de base de datos. No se guarda en git: se pasa con `TF_VAR_db_password` |
 | `gke_cluster_name` | `bank-usac-gke` | Nombre del cluster |
 | `gke_zone` | `us-central1-a` | Zona del cluster zonal |
-| `gke_machine_type` | `e2-medium` | Tipo de máquina de los nodos |
-| `gke_min_nodes` / `gke_max_nodes` | `1` / `3` | Límites del cluster autoscaler |
+| `gke_machine_type` | `e2-standard-2` | Tipo de máquina de los nodos. Se subió de `e2-medium` (y de 1–3 nodos) al agregar el stack de observabilidad en el mismo cluster |
+| `gke_min_nodes` / `gke_max_nodes` | `2` / `4` | Límites del cluster autoscaler |
 
 ## Outputs
 
@@ -46,6 +48,7 @@ El cluster va en la **misma VPC** que Cloud SQL porque el peering de Cloud SQL n
 | `github_deployer_email` | Service account para crear la llave de `GCP_SA_KEY` |
 | `frontend_registry` | Variable `GAR_REPOSITORY` de GitHub (`us-central1-docker.pkg.dev/<proyecto>/bank-usac`) |
 | `frontend_run_service_account` | Variable `FRONTEND_RUN_SA` de GitHub |
+| `gateway_ip` | IP del Ingress HTTPS; el host público es `<ip con guiones>.sslip.io` (hoy `35-244-157-47.sslip.io`) |
 
 Las IP cambian en cada `apply` desde cero: siempre se leen de los outputs, no se copian en la documentación ni en los manifiestos.
 

@@ -14,6 +14,14 @@ export interface CreateTransactionCommand {
   destinationBankCode?: string;
 }
 
+export interface RecordIncomingInterbankCommand {
+  originBankCode: string | null;
+  originAccount: string | null;
+  accountId: string;
+  amount: number;
+  correlationId: string;
+}
+
 @Injectable()
 export class CreateTransactionService {
   constructor(
@@ -53,5 +61,45 @@ export class CreateTransactionService {
     await this.transactionRepository.save(transaction);
 
     return transaction;
+  }
+
+  /**
+   * Depósito interbancario recibido: Account ya lo acreditó, así que solo se
+   * registra como COMPLETED / ACCEPTED para el historial. Idempotente por
+   * correlationId (Account puede repetir el evento).
+   */
+  async recordIncomingInterbank(
+    command: RecordIncomingInterbankCommand,
+  ): Promise<{ transaction: Transaction; created: boolean }> {
+    const existingTransaction =
+      await this.transactionRepository.findByCorrelationId(
+        command.correlationId,
+      );
+
+    if (existingTransaction) {
+      return { transaction: existingTransaction, created: false };
+    }
+
+    const now = new Date();
+    const originBankCode = command.originBankCode ?? 'EXTERNAL';
+
+    const transaction = new Transaction(
+      randomUUID(),
+      command.originAccount || originBankCode,
+      command.accountId,
+      command.amount,
+      TransactionStatus.COMPLETED,
+      command.correlationId,
+      now,
+      now,
+      null,
+      null,
+      InterbankState.ACCEPTED,
+      originBankCode,
+    );
+
+    await this.transactionRepository.save(transaction);
+
+    return { transaction, created: true };
   }
 }
