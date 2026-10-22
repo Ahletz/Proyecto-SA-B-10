@@ -32,6 +32,7 @@ export interface TransactionHistoryItem {
   correlationId: string;
   // Depósito interbancario (Fase 3); null en transferencias internas.
   destinationBankCode: string | null;
+  originBankCode: string | null;
   interbankState: InterbankState | null;
   createdAt: Date;
   updatedAt: Date;
@@ -84,6 +85,7 @@ export class GetTransactionHistoryService {
         failureReason: t.failureReason,
         correlationId: t.correlationId,
         destinationBankCode: t.destinationBankCode,
+        originBankCode: t.originBankCode,
         interbankState: t.interbankState,
         createdAt: t.createdAt,
         updatedAt: t.updatedAt,

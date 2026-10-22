@@ -12,6 +12,9 @@ export interface TransactionHistoryItem{
   detailedStatus:string;
   failureReason?:string|null;
   correlationId:string;
+  /* Interbancarias: banco destino (enviadas) o de origen (recibidas). */
+  destinationBankCode?:string|null;
+  originBankCode?:string|null;
   createdAt:string;
   updatedAt:string;
 }

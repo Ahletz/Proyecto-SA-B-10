@@ -63,6 +63,15 @@ export class TransactionOrmEntity {
   })
   destinationBankCode: string | null;
 
+  // Depósito interbancario recibido (Fase 3); null en el resto.
+  @Column({
+    name: 'origin_bank_code',
+    type: 'varchar',
+    length: 10,
+    nullable: true,
+  })
+  originBankCode: string | null;
+
   @Column({
     name: 'interbank_state',
     type: 'varchar',

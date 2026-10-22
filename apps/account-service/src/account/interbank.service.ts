@@ -202,13 +202,17 @@ export class InterbankService {
       return { op, fresh: true };
     });
 
-    await this.emitDepositResult(event.correlationId, decision.op);
+    await this.emitDepositResult(event.correlationId, decision.op, p.originAccount);
     return decision.op.status === 'CREDITED' ? 'done' : decision.fresh ? 'rejected' : 'skipped';
   }
 
-  private emitDepositResult(correlationId: string, op: InterbankOperationEntity) {
+  // originBankCode y originAccount los usa Transaction para mostrar el depósito en el historial del cliente.
+  private emitDepositResult(correlationId: string, op: InterbankOperationEntity, originAccount?: string) {
     if (op.status === 'CREDITED' || op.status === 'REFUNDED') {
-      return this.emit('account.interbank.deposit.credited', correlationId, { interbankTransferId: op.interbankTransferId, accountId: op.accountId, amount: Number(op.amount) });
+      return this.emit('account.interbank.deposit.credited', correlationId, {
+        interbankTransferId: op.interbankTransferId, accountId: op.accountId, amount: Number(op.amount),
+        originBankCode: op.partnerBankCode, originAccount: originAccount ?? null,
+      });
     }
     return this.emit('account.interbank.deposit.rejected', correlationId, {
       interbankTransferId: op.interbankTransferId, reasonCode: op.reasonCode ?? 'PROCESSING_ERROR', reasonMessage: reasonMessage(op.reasonCode as RejectReason | null),
