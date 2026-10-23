@@ -8,6 +8,7 @@ resources:
   - k8s/otel-collector.yaml
   - k8s/otel-logs-agent.yaml
   - k8s/prometheus.yaml
+  - k8s/alertmanager.yaml
   - k8s/kube-state-metrics.yaml
   - k8s/tempo.yaml
   - k8s/loki.yaml

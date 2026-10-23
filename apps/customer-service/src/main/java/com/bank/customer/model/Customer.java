@@ -21,7 +21,7 @@ public class Customer {
     @Column(
         name = "kyc_status",
         nullable = false,
-        columnDefinition = "varchar(20) default 'PENDING'"
+        length = 20
     )
     private KycStatus kycStatus = KycStatus.PENDING;
 

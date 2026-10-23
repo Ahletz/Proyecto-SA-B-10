@@ -64,6 +64,7 @@ export function TransferPage(){
   const[isSending,setIsSending]=useState(false);
   const[error,setError]=useState<string|null>(null);
   const[correlationId,setCorrelationId]=useState<string|null>(null);
+  const[traceId,setTraceId]=useState<string|null>(null);
   const[tracking,setTracking]=useState<Tracking|null>(null);
 
   const pollTimer=useRef<number>();
@@ -180,6 +181,7 @@ export function TransferPage(){
 
       setTracking({phase:'queued'});
       setCorrelationId(accepted.correlationId);
+      setTraceId(accepted.traceId??null);
     }catch(e){
       setError(e instanceof Error?e.message:String(e));
     }finally{
@@ -380,6 +382,7 @@ export function TransferPage(){
 
               <p className="muted transfer-correlation">
                 Código de seguimiento: <CopyId value={correlationId}/>
+                {traceId&&<> · Traza: <CopyId value={traceId}/></>}
               </p>
 
               <Link className="btn secondary" to={`/transactions?accountId=${transfer?.sourceAccount??sourceAccount}`}>

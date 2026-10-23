@@ -42,15 +42,32 @@ jobs:
             --from-literal=password="${GRAFANA_ADMIN_PASSWORD}" \
             --dry-run=client -o yaml | kubectl apply -f -
 
+      - name: Configurar autenticación de alertas
+        env:
+          CONFIGURED_TOKEN: ${{ secrets.ALERT_WEBHOOK_TOKEN }}
+        run: |
+          # Reuse the existing cluster token, or the repository secret. Never print credentials.
+          TOKEN="$CONFIGURED_TOKEN"
+          if [[ -z "$TOKEN" ]]; then
+            TOKEN=$(kubectl -n observability get secret alert-webhook-auth -o jsonpath='{.data.token}' 2>/dev/null | base64 -d || true)
+          fi
+          if [[ -z "$TOKEN" ]]; then TOKEN=$(openssl rand -hex 32); fi
+          echo "::add-mask::$TOKEN"
+          for ns in observability prod; do
+            kubectl create namespace "$ns" --dry-run=client -o yaml | kubectl apply -f -
+            kubectl -n "$ns" create secret generic alert-webhook-auth --from-literal=token="$TOKEN" \
+              --dry-run=client -o yaml | kubectl apply -f -
+          done
+
       - name: Aplicar el stack
         run: kubectl apply -k observability
 
       - name: Recargar configuración
         run: |
-          kubectl -n observability rollout restart deployment/prometheus deployment/grafana
+          kubectl -n observability rollout restart deployment/prometheus deployment/grafana deployment/alertmanager
 
       - name: Esperar a que todo esté listo
         run: |
-          for d in otel-collector prometheus kube-state-metrics tempo loki grafana; do
+          for d in otel-collector prometheus alertmanager kube-state-metrics tempo loki grafana; do
             kubectl -n observability rollout status deployment/$d --timeout=300s
           done
