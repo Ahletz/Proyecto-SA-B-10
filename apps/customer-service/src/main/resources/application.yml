@@ -6,7 +6,7 @@ spring:
   jpa:
     hibernate:
       ddl-auto: update
-    show-sql: true
+    show-sql: false
 
   rabbitmq:
     host: ${RABBITMQ_HOST:localhost}
@@ -28,3 +28,8 @@ management:
 jwt:
   secret: ${JWT_SECRET:default-secret-change-me}
   expiration-ms: ${JWT_EXPIRATION_MS:3600000}
+
+logging:
+  structured:
+    format:
+      console: com.bank.customer.observability.SafeJsonFormatter

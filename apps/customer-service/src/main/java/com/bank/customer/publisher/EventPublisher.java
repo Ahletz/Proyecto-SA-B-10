@@ -6,6 +6,8 @@ import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.stereotype.Component;
 
 import java.time.Instant;
+import com.bank.customer.observability.Telemetry;
+import io.opentelemetry.context.Context;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
@@ -16,8 +18,9 @@ public class EventPublisher {
     private final RabbitTemplate rabbit;
     private final ObjectMapper mapper = new ObjectMapper();
 
-    public EventPublisher(RabbitTemplate rabbit) {
-        this.rabbit = rabbit;
+    private final Telemetry telemetry;
+    public EventPublisher(RabbitTemplate rabbit, Telemetry telemetry) {
+        this.rabbit = rabbit; this.telemetry = telemetry;
     }
 
     public void publish(String eventType, Map<String,Object> payload, String correlationId) {
@@ -29,10 +32,13 @@ public class EventPublisher {
         envelope.put("correlationId", correlationId == null ? UUID.randomUUID().toString() : correlationId);
         envelope.put("payload", payload);
 
+        telemetry.span("publish " + eventType, Context.current(), String.valueOf(envelope.get("correlationId")), () -> {
         try {
             String body = mapper.writeValueAsString(envelope);
             String routingKey = eventType; // simple mapping
             rabbit.convertAndSend("bank.events", routingKey, body, message -> {
+                telemetry.headers().forEach((key, value) -> message.getMessageProperties().setHeader(key, value));
+                message.getMessageProperties().setCorrelationId(String.valueOf(envelope.get("correlationId")));
                 message.getMessageProperties().setHeader("eventId", envelope.get("eventId"));
                 message.getMessageProperties().setHeader("correlationId", envelope.get("correlationId"));
                 message.getMessageProperties().setContentType(org.springframework.amqp.core.MessageProperties.CONTENT_TYPE_JSON);
@@ -41,5 +47,7 @@ public class EventPublisher {
         } catch (JsonProcessingException e) {
             throw new RuntimeException(e);
         }
+        return null;
+        });
     }
 }
