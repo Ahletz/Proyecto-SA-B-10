@@ -1,220 +1,53 @@
 package com.bank.notification.consumer;
 
-import com.bank.notification.model.ProcessedEvent;
-import com.bank.notification.publisher.NotificationEventPublisher;
-import com.bank.notification.repository.ProcessedEventRepository;
-import com.bank.notification.service.ClassificationResult;
-import com.bank.notification.service.EventClassificationService;
-import com.bank.notification.service.NotificationService;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.dao.DataIntegrityViolationException;
+import com.bank.notification.observability.Telemetry;
+import com.bank.notification.service.AuditIngestion;
+import com.fasterxml.jackson.databind.*;
+import io.opentelemetry.api.common.*;
+import io.opentelemetry.api.trace.*;
+import io.opentelemetry.context.*;
+import org.slf4j.*;
+import org.springframework.amqp.core.Message;
 import org.springframework.stereotype.Component;
-
-import java.time.OffsetDateTime;
-import java.time.format.DateTimeParseException;
+import java.util.*;
 
 @Component
 public class CustomerEventListener {
-
-    private static final Logger log =
-        LoggerFactory.getLogger(
-            CustomerEventListener.class
-        );
-
-    private final ProcessedEventRepository repository;
-    private final NotificationService notifications;
-    private final EventClassificationService classifier;
-    private final NotificationEventPublisher publisher;
-
-    private final ObjectMapper objectMapper =
-        new ObjectMapper().findAndRegisterModules();
-
-    public CustomerEventListener(
-            ProcessedEventRepository repository,
-            NotificationService notifications,
-            EventClassificationService classifier,
-            NotificationEventPublisher publisher) {
-
-        this.repository = repository;
-        this.notifications = notifications;
-        this.classifier = classifier;
-        this.publisher = publisher;
+    private final AuditIngestion ingestion;private final Telemetry telemetry;
+    private final ObjectMapper mapper=new ObjectMapper();
+    private final io.opentelemetry.api.metrics.LongCounter processed,duplicates;
+    private final io.opentelemetry.api.metrics.DoubleHistogram duration;
+    private static final Logger log=LoggerFactory.getLogger(CustomerEventListener.class);
+    public CustomerEventListener(AuditIngestion ingestion,Telemetry telemetry) {
+        this.ingestion=ingestion;this.telemetry=telemetry;
+        var meter=telemetry.otel().getMeter("bank-usac");
+        processed=meter.counterBuilder("bank.events.processed").build();duplicates=meter.counterBuilder("bank.events.duplicate").build();
+        duration=meter.histogramBuilder("bank.operation.duration").setUnit("s").build();
     }
-
-    public void onMessage(byte[] message) {
-
-        try {
-            JsonNode root =
-                objectMapper.readTree(message);
-
-            String eventId =
-                root.path("eventId").asText();
-
-            String eventType =
-                root.path("eventType").asText();
-
-            String correlationId =
-                root.path("correlationId").asText();
-
-            if (eventId.isBlank()
-                    || eventType.isBlank()
-                    || correlationId.isBlank()) {
-
-                throw new IllegalArgumentException(
-                    "eventId, eventType y correlationId son requeridos"
-                );
-            }
-
-            if (repository.existsById(eventId)) {
-                log.info(
-                    "Evento duplicado ignorado: {}",
-                    eventId
-                );
-                return;
-            }
-
-            JsonNode payloadNode =
-                root.path("payload");
-
-            ClassificationResult classification =
-                classifier.classify(
-                    eventType,
-                    payloadNode
-                );
-
-            /*
-             * Notificaciones específicas heredadas
-             * de Fase 1.
-             */
-            if ("customer.registered".equals(eventType)) {
-
-                notifications.sendActivation(
-                    payloadNode.path("email").asText(),
-                    payloadNode.path("username").asText(),
-                    payloadNode
-                        .path("activationToken")
-                        .asText()
-                );
-
-            } else if (
-                "transaction.transfer.requested"
-                    .equals(eventType)
-            ) {
-
-                notifications.sendTransferReceived(
-                    payloadNode
-                        .path("requestedEmail")
-                        .asText(),
-                    correlationId,
-                    payloadNode
-                        .path("amount")
-                        .asDouble()
-                );
-            }
-
-            /*
-             * Publica el evento de clasificación antes
-             * del registro definitivo.
-             *
-             * El eventId del evento derivado es
-             * determinístico, por lo que un retry
-             * conserva la misma identidad lógica.
-             */
-            publisher.publishClassified(
-                eventId,
-                classification.severity(),
-                classification.origin(),
-                classification.message(),
-                correlationId
-            );
-
-            Integer version =
-                root.path("version").isInt()
-                    ? root.path("version").asInt()
-                    : 1;
-
-            OffsetDateTime eventTimestamp =
-                parseTimestamp(
-                    root.path("timestamp")
-                        .asText(null)
-                );
-
-            String payload =
-                payloadNode.isMissingNode()
-                    ? "{}"
-                    : objectMapper
-                        .writeValueAsString(
-                            payloadNode
-                        );
-
-            ProcessedEvent processedEvent =
-                new ProcessedEvent(
-                    eventId,
-                    eventType,
-                    version,
-                    correlationId,
-                    payload,
-                    eventTimestamp,
-                    OffsetDateTime.now(),
-                    classification.severity(),
-                    classification.origin(),
-                    classification.message()
-                );
-
-            try {
-                repository.save(processedEvent);
-            } catch (
-                DataIntegrityViolationException exception
-            ) {
-                log.info(
-                    "Evento duplicado ignorado: {}",
-                    eventId
-                );
-                return;
-            }
-
-            log.info(
-                "Evento auditado: {} | severidad={} | correlationId={}",
-                eventType,
-                classification.severity(),
-                correlationId
-            );
-
-        } catch (Exception exception) {
-
-            log.error(
-                "Error procesando evento: {}",
-                exception.getMessage(),
-                exception
-            );
-
-            throw new RuntimeException(
-                "Error al procesar evento",
-                exception
-            );
-        }
-    }
-
-    private OffsetDateTime parseTimestamp(
-            String timestamp) {
-
-        if (timestamp == null
-                || timestamp.isBlank()) {
-            return null;
-        }
-
-        try {
-            return OffsetDateTime.parse(timestamp);
-        } catch (
-            DateTimeParseException exception
-        ) {
-            throw new IllegalArgumentException(
-                "timestamp inválido",
-                exception
-            );
+    public void onMessage(Message message) {
+        if(message.getBody().length>1_048_576) throw new IllegalArgumentException("Event too large");
+        final JsonNode root;
+        try {root=mapper.readTree(message.getBody());} catch(Exception ex) {throw new IllegalArgumentException("Invalid event JSON");}
+        String type=AuditIngestion.required(root,"eventType",100),cid=AuditIngestion.required(root,"correlationId",128);
+        Map<String,String> headers=new HashMap<>();
+        message.getMessageProperties().getHeaders().forEach((k,v)->{if(v!=null)headers.put(k,v.toString());});
+        Span span=telemetry.otel().getTracer("bank-usac").spanBuilder("process "+type)
+            .setParent(telemetry.extract(headers)).setSpanKind(SpanKind.CONSUMER)
+            .setAttribute("messaging.system","rabbitmq").setAttribute("messaging.operation.type","process")
+            .setAttribute("messaging.destination.name","bank.events").setAttribute("bank.correlation_id",cid).setAttribute("bank.event.type",type).startSpan();
+        long start=System.nanoTime();Map<String,String> previous=MDC.getCopyOfContextMap();
+        try(Scope ignored=span.makeCurrent()) {
+            MDC.put("correlationId",cid);MDC.put("event",type);
+            boolean fresh=ingestion.ingest(root);
+            if(!fresh)duplicates.add(1,Attributes.of(AttributeKey.stringKey("event_type"),type));
+            processed.add(1,Attributes.builder().put("event_type",type).put("outcome","success").build());
+            log.info(fresh?"Business event audited":"Duplicate business event ignored");
+        } catch(RuntimeException ex) {
+            span.setStatus(StatusCode.ERROR,ex.getClass().getSimpleName());
+            processed.add(1,Attributes.builder().put("event_type",type).put("outcome","technical_error").build());throw ex;
+        } finally {
+            duration.record((System.nanoTime()-start)/1e9,Attributes.of(AttributeKey.stringKey("operation"),"consume "+type));
+            span.end();if(previous==null)MDC.clear();else MDC.setContextMap(previous);
         }
     }
 }

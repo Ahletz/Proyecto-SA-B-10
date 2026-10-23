@@ -5,7 +5,11 @@ import jakarta.persistence.*;
 import java.time.OffsetDateTime;
 
 @Entity
-@Table(name = "processed_events")
+@Table(name = "processed_events", indexes = {
+    @Index(name="audit_correlation_idx", columnList="correlation_id,processed_at"),
+    @Index(name="audit_trace_idx", columnList="trace_id,processed_at"),
+    @Index(name="audit_filter_idx", columnList="service_name,severity,processed_at")
+})
 public class ProcessedEvent {
 
     @Id
@@ -47,6 +51,12 @@ public class ProcessedEvent {
     )
     private String classificationMessage;
 
+    @Column(length=32) private String traceId;
+    @Column(length=16) private String spanId;
+    @Column(length=100) private String serviceName;
+    public String getTraceId() { return traceId; }
+    public String getSpanId() { return spanId; }
+    public String getServiceName() { return serviceName; }
     public ProcessedEvent() {}
 
     public ProcessedEvent(

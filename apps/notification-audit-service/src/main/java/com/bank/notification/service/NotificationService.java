@@ -14,6 +14,8 @@ public class NotificationService {
     @Value("${bank.frontend-url:http://localhost:3000}") private String frontendUrl;
     @Value("${spring.mail.username:no-reply@bankusac.local}") private String from;
 
+    @Value("${NOTIFICATION_ALERT_EMAIL:alerts@bankusac.local}") private String alertEmail;
+
     public NotificationService(JavaMailSender mailSender) { this.mailSender = mailSender; }
 
     public void sendActivation(String email, String username, String token) {
@@ -21,7 +23,7 @@ public class NotificationService {
         m.setFrom(from); m.setTo(email); m.setSubject("Bank USAC - Activación de cuenta");
         m.setText("Hola " + username + ",\n\nActiva tu cuenta en:\n" + frontendUrl + "/activate?token=" + token + "\n\nBank USAC");
         mailSender.send(m);
-        log.info("Activation notification sent to {}", email);
+        log.info("Activation notification delivered");
     }
 
     public void sendTransferReceived(String email, String correlationId, double amount) {
@@ -30,6 +32,12 @@ public class NotificationService {
         m.setFrom(from); m.setTo(email); m.setSubject("Bank USAC - Transferencia recibida");
         m.setText("Se recibió una solicitud de transferencia por Q" + amount + ".\nCorrelationId: " + correlationId + "\nEl procesamiento continuará de forma asíncrona.");
         mailSender.send(m);
-        log.info("Transfer notification sent to {} correlationId={}", email, correlationId);
+        log.info("Transfer notification delivered correlationId={}", correlationId);
+    }
+    public void sendWarning(String email,String kind,String message,String cid,String deliveryId) {
+        SimpleMailMessage m=new SimpleMailMessage();m.setFrom(from);
+        m.setTo(email==null||email.isBlank()?alertEmail:email);
+        m.setSubject("Bank USAC - "+kind);m.setText(message+"\nCorrelationId: "+cid+"\nNotificationId: "+deliveryId);
+        mailSender.send(m);log.warn("Warning notification delivered; kind={} correlationId={}",kind,cid);
     }
 }

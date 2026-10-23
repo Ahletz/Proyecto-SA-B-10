@@ -1,139 +1,32 @@
 package com.bank.notification.consumer;
-
-import com.bank.notification.model.NotificationSeverity;
-import com.bank.notification.model.ProcessedEvent;
-import com.bank.notification.publisher.NotificationEventPublisher;
-import com.bank.notification.repository.ProcessedEventRepository;
-import com.bank.notification.service.EventClassificationService;
-import com.bank.notification.service.NotificationService;
-import org.junit.jupiter.api.BeforeEach;
+import com.bank.notification.observability.Telemetry;
+import com.bank.notification.service.AuditIngestion;
+import io.opentelemetry.sdk.OpenTelemetrySdk;
+import io.opentelemetry.sdk.trace.SdkTracerProvider;
+import io.opentelemetry.sdk.trace.export.SimpleSpanProcessor;
+import io.opentelemetry.sdk.testing.exporter.InMemorySpanExporter;
+import io.opentelemetry.context.propagation.ContextPropagators;
+import io.opentelemetry.api.trace.propagation.W3CTraceContextPropagator;
 import org.junit.jupiter.api.Test;
-import org.mockito.ArgumentCaptor;
-
-import java.nio.charset.StandardCharsets;
-
+import org.springframework.amqp.core.*;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
-
 class CustomerEventListenerTest {
-
-    private ProcessedEventRepository repository;
-    private NotificationService notifications;
-    private NotificationEventPublisher publisher;
-    private CustomerEventListener listener;
-
-    @BeforeEach
-    void setup() {
-        repository =
-            mock(ProcessedEventRepository.class);
-
-        notifications =
-            mock(NotificationService.class);
-
-        publisher =
-            mock(NotificationEventPublisher.class);
-
-        listener = new CustomerEventListener(
-            repository,
-            notifications,
-            new EventClassificationService(),
-            publisher
-        );
+    @Test void consumerContinuesParentAndClosesMdc() {
+        var spans=InMemorySpanExporter.create();
+        try(var sdk=OpenTelemetrySdk.builder().setTracerProvider(SdkTracerProvider.builder().addSpanProcessor(SimpleSpanProcessor.create(spans)).build())
+            .setPropagators(ContextPropagators.create(W3CTraceContextPropagator.getInstance())).build()) {
+            AuditIngestion ingestion=mock(AuditIngestion.class);when(ingestion.ingest(any())).thenReturn(true);
+            var listener=new CustomerEventListener(ingestion,new Telemetry(sdk));
+            var properties=new MessageProperties();properties.setHeader("traceparent","00-11111111111111111111111111111111-2222222222222222-01");
+            listener.onMessage(new Message("{\"eventId\":\"evt-1\",\"eventType\":\"account.anomaly.detected\",\"correlationId\":\"corr-1\",\"payload\":{}}".getBytes(),properties));
+            var span=spans.getFinishedSpanItems().get(0);assertEquals("11111111111111111111111111111111",span.getTraceId());
+            assertEquals("2222222222222222",span.getParentSpanId());assertNull(org.slf4j.MDC.get("correlationId"));verify(ingestion).ingest(any());
+        }
     }
-
-    @Test
-    void classifiesPersistsAndPublishesEvent() {
-
-        when(repository.existsById("evt-1"))
-            .thenReturn(false);
-
-        String json = """
-            {
-              "eventId": "evt-1",
-              "eventType": "payment.rejected",
-              "version": 1,
-              "timestamp": "2026-09-22T04:00:00Z",
-              "correlationId": "corr-1",
-              "payload": {
-                "paymentId": "PAY-1",
-                "transactionId": "TX-1",
-                "status": "REJECTED",
-                "reason": "EXTERNAL_FAILURE"
-              }
-            }
-            """;
-
-        listener.onMessage(
-            json.getBytes(StandardCharsets.UTF_8)
-        );
-
-        ArgumentCaptor<ProcessedEvent> captor =
-            ArgumentCaptor.forClass(
-                ProcessedEvent.class
-            );
-
-        verify(repository).save(
-            captor.capture()
-        );
-
-        ProcessedEvent saved =
-            captor.getValue();
-
-        assertEquals(
-            NotificationSeverity.ERROR,
-            saved.getSeverity()
-        );
-
-        assertEquals(
-            "payment",
-            saved.getOrigin()
-        );
-
-        assertEquals(
-            "corr-1",
-            saved.getCorrelationId()
-        );
-
-        verify(publisher)
-            .publishClassified(
-                eq("evt-1"),
-                eq(NotificationSeverity.ERROR),
-                eq("payment"),
-                anyString(),
-                eq("corr-1")
-            );
-    }
-
-    @Test
-    void duplicateEventIsIgnored() {
-
-        when(repository.existsById("evt-2"))
-            .thenReturn(true);
-
-        String json = """
-            {
-              "eventId": "evt-2",
-              "eventType": "account.created",
-              "version": 1,
-              "timestamp": "2026-09-22T04:00:00Z",
-              "correlationId": "corr-2",
-              "payload": {
-                "accountId": "ACC-1",
-                "customerId": "CUST-1"
-              }
-            }
-            """;
-
-        listener.onMessage(
-            json.getBytes(StandardCharsets.UTF_8)
-        );
-
-        verify(repository, never())
-            .save(any());
-
-        verifyNoInteractions(
-            publisher,
-            notifications
-        );
+    @Test void malformedEventIsRejectedWithoutPersisting() {
+        AuditIngestion ingestion=mock(AuditIngestion.class);
+        var listener=new CustomerEventListener(ingestion,new Telemetry(io.opentelemetry.api.OpenTelemetry.noop()));
+        assertThrows(IllegalArgumentException.class,()->listener.onMessage(new Message("invalid".getBytes(),new MessageProperties())));verifyNoInteractions(ingestion);
     }
 }

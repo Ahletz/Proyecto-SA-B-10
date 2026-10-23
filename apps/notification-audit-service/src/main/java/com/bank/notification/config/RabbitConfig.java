@@ -19,9 +19,10 @@ public class RabbitConfig {
     @Bean Binding customerBinding(){return BindingBuilder.bind(auditQueue()).to(eventsExchange()).with("customer.#");}
     @Bean Binding transactionBinding(){return BindingBuilder.bind(auditQueue()).to(eventsExchange()).with("transaction.#");}
     @Bean Binding accountBinding(){return BindingBuilder.bind(auditQueue()).to(eventsExchange()).with("account.#");}
+    @Bean Binding interbankBinding(){return BindingBuilder.bind(auditQueue()).to(eventsExchange()).with("interbank.#");}
     @Bean Binding paymentBinding(){return BindingBuilder.bind(auditQueue()).to(eventsExchange()).with("payment.#");}
     @Bean SimpleMessageListenerContainer auditMessageListenerContainer(ConnectionFactory cf, CustomerEventListener listener){
-        SimpleMessageListenerContainer c=new SimpleMessageListenerContainer(cf);c.setQueues(auditQueue());c.setMessageListener(m->listener.onMessage(m.getBody()));c.setDefaultRequeueRejected(false);
+        SimpleMessageListenerContainer c=new SimpleMessageListenerContainer(cf);c.setQueues(auditQueue());c.setMessageListener(m->listener.onMessage(m));c.setDefaultRequeueRejected(false);c.setConcurrentConsumers(2);c.setMaxConcurrentConsumers(2);c.setPrefetchCount(20);
         c.setAdviceChain(RetryInterceptorBuilder.stateless().maxRetries(3).backOffOptions(1000,2.0,10000).build());return c;
     }
 }
