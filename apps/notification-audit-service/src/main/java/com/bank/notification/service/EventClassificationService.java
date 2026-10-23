@@ -13,6 +13,11 @@ public class EventClassificationService {
         String origin = extractOrigin(eventType);
 
         return switch (eventType) {
+            case "account.anomaly.detected" -> new ClassificationResult(NotificationSeverity.WARNING, origin,
+                "Alta frecuencia de operaciones en cuenta " + value(payload,"accountId","desconocida"));
+            case "slo.alert.received" -> new ClassificationResult(
+                "resolved".equals(value(payload,"alertStatus","firing")) ? NotificationSeverity.INFO : NotificationSeverity.WARNING,
+                "slo", "Alerta " + value(payload,"alertname","SLO") + ": " + value(payload,"alertStatus","firing"));
             case "customer.kyc.status.changed" ->
                 classifyKyc(payload, origin);
 

@@ -110,7 +110,10 @@ public class CustomerService {
         if (req.documentPhoto()!=null && !req.documentPhoto().isBlank()) { c.setDocumentPhoto(req.documentPhoto()); fields.add("documentPhoto"); }
         if (fields.isEmpty()) throw new ValidationException("No se envió ningún campo para actualizar");
         repo.save(c);
-        publisher.publish("customer.updated", Map.of("customerId", "CUST-" + c.getId(), "updatedFields", fields), correlationId);
+        Map<String,Object> updated = new LinkedHashMap<>();
+        updated.put("customerId", "CUST-" + c.getId()); updated.put("updatedFields", fields);
+        if(fields.contains("email")) updated.put("email",c.getEmail());
+        publisher.publish("customer.updated", updated, correlationId);
         return toResponse(c);
     }
 
