@@ -34,7 +34,12 @@ public class AuditController {
             var predicates=new ArrayList<jakarta.persistence.criteria.Predicate>();
             if(correlationId!=null&&!correlationId.isBlank())predicates.add(cb.equal(root.get("correlationId"),correlationId));
             if(traceId!=null&&!traceId.isBlank())predicates.add(cb.equal(root.get("traceId"),traceId));
-            if(service!=null&&!service.isBlank())predicates.add(cb.or(cb.equal(root.get("serviceName"),service),cb.and(cb.isNull(root.get("serviceName")),cb.like(root.get("eventType"),service.replace("-service","")+".%"))));
+            if(service!=null&&!service.isBlank()) {
+                var gatewayEvent=root.get("eventType").in("transaction.transfer.requested","transaction.interbank.requested");
+                var legacy=service.equals("api-gateway")?gatewayEvent:cb.like(root.get("eventType"),service.replace("-service","")+".%");
+                if(service.equals("transaction-service"))legacy=cb.and(legacy,cb.not(gatewayEvent));
+                predicates.add(cb.or(cb.equal(root.get("serviceName"),service),cb.and(cb.isNull(root.get("serviceName")),legacy)));
+            }
             if(selected!=null)predicates.add(cb.equal(root.get("severity"),selected));
             if(q!=null&&!q.isBlank()) {
                 String search="%"+q.toLowerCase(Locale.ROOT).replace("!","!!").replace("%","!%").replace("_","!_")+"%";

@@ -1,0 +1,32 @@
+[
+  {
+    "utc": "2026-10-23T06:28:09.337810+00:00",
+    "elapsed": 0.0,
+    "event": "Inicio de carga Customer a 1 registro/s; baseline 30 s"
+  },
+  {
+    "utc": "2026-10-23T06:28:39.338185+00:00",
+    "elapsed": 30.0,
+    "event": "Inicio de inyecci\u00f3n: detener aplicaci\u00f3n RabbitMQ local"
+  },
+  {
+    "utc": "2026-10-23T06:28:40.560935+00:00",
+    "elapsed": 31.2,
+    "event": "RabbitMQ detenido; mantener carga 150 s"
+  },
+  {
+    "utc": "2026-10-23T06:31:14.225472+00:00",
+    "elapsed": 184.9,
+    "event": "RabbitMQ restaurado"
+  },
+  {
+    "utc": "2026-10-23T06:32:13.750134+00:00",
+    "elapsed": 244.4,
+    "event": "Carga terminada; observar recuperaci\u00f3n 30 s"
+  },
+  {
+    "utc": "2026-10-23T06:32:43.752000+00:00",
+    "elapsed": 274.4,
+    "event": "Fin de observaci\u00f3n"
+  }
+]

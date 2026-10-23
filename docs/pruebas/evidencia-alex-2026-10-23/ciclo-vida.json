@@ -1,0 +1,11 @@
+{
+  "customerId": "CUST-487",
+  "lifecycleCorrelationId": "lifecycle-1792737750",
+  "expectedTraceId": "d19a7ed7906349d7be48c1fb3f1e0f42",
+  "auditEvents": 200,
+  "duplicateAnomalyRows": 1,
+  "anomalySeverity": "WARNING",
+  "emails": 188,
+  "kycEventsAfterRepeat": 1,
+  "checkedAt": "2026-10-23T06:42:33Z"
+}

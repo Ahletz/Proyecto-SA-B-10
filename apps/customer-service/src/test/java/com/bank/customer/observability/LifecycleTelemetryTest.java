@@ -75,6 +75,15 @@ class LifecycleTelemetryTest {
         assertEquals("corr-http",response.getHeader("X-Correlation-Id"));
         assertNull(org.slf4j.MDC.get("correlationId"));
     }
+    @Test void populationUsesActualRepositoryCounts() {
+        var repository=mock(com.bank.customer.repository.CustomerRepository.class);
+        when(repository.countByKycStatus(KycStatus.VERIFIED)).thenReturn(4L);
+        when(repository.countByKycStatus(KycStatus.REJECTED)).thenReturn(2L);
+        new CustomerPopulationMetrics(telemetry,repository);
+        var gauge=metrics.collectAllMetrics().stream().filter(m->m.getName().equals("bank.customer.kyc.current")).findFirst().orElseThrow();
+        assertEquals(6,gauge.getLongGaugeData().getPoints().stream().mapToLong(p->p.getValue()).sum());
+        assertEquals(2,gauge.getLongGaugeData().getPoints().size());
+    }
     @Test void secretsAreRedacted() {
         String safe = SafeJsonFormatter.redact("a.person@example.com Bearer abc.def.ghi documentNumber=1234567890123 activationToken=secret /activate/private");
         for (String value : List.of("a.person@example.com","abc.def.ghi","1234567890123","=secret","/private")) assertFalse(safe.contains(value),safe);

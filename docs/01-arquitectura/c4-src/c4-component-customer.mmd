@@ -1,32 +1,30 @@
 flowchart LR
-    gateway["API Gateway"]
-
-    subgraph customer["Customer Service — Spring Boot"]
-        controller["CustomerController\nREST Controller"]
-
-        service["CustomerService\nLógica de clientes y KYC"]
-
-        security["JWT / Security\nAutenticación y autorización"]
-
-        repository["CustomerRepository\nPersistencia JPA"]
-
-        publisher["EventPublisher\nAdaptador RabbitMQ"]
-
-        dto["DTO / Modelo\nCustomer · KycStatus\nUpdateKycStatusRequest"]
-
-        controller --> service
-        security --> controller
-        controller --> dto
-        service --> dto
+    gateway["API Gateway · JWT / roles"]
+    subgraph customer["Customer Service · Spring Boot"]
+        filter["HTTP W3C / correlationId"]
+        controller["CustomerController"]
+        service["CustomerService · registro / KYC"]
+        lifecycle["CustomerLifecycle · contexto persistido / primera verificación"]
+        repository["CustomerRepository · JPA / bloqueo KYC"]
+        publisher["EventPublisher · headers W3C"]
+        sdk["OTel SDK · spans / contadores / histograma"]
+        logs["JSON stdout · redacción / MDC"]
+        filter --> controller --> service
+        service --> lifecycle
         service --> repository
         service --> publisher
+        lifecycle --> sdk
+        publisher --> sdk
+        service --> logs
     end
-
-    db[("PostgreSQL\nbank_customer")]
-    rabbit["RabbitMQ\nbank.events"]
-
-    gateway -->|"HTTP / JWT"| security
-
-    repository -->|"JPA"| db
-
-    publisher -->|"customer.registered\ncustomer.activated\ncustomer.kyc.status.changed"| rabbit
+    db[("PostgreSQL Customer
+KYC / lifecycleCorrelationId / traceparent / verifiedAt")]
+    rabbit["RabbitMQ · bank.events"]
+    collector["OTel Collector"]
+    agent["Agente de logs por nodo"]
+    loki["Loki"]
+    gateway --> filter
+    repository --> db
+    publisher -->|"customer.registered / customer.activated / customer.kyc.status.changed"| rabbit
+    sdk -->|"OTLP trazas / métricas"| collector
+    logs --> agent --> loki

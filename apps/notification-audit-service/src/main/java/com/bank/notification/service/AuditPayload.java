@@ -17,6 +17,7 @@ public final class AuditPayload {
         return result;
     }
     public static String service(String eventType) {
+        if(eventType.equals("transaction.transfer.requested")||eventType.equals("transaction.interbank.requested")) return "api-gateway";
         String domain=eventType.split("[.]",2)[0];
         return switch(domain) {
             case "customer","account","transaction","payment" -> domain+"-service";

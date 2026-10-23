@@ -23,3 +23,12 @@ Acuerdo del usuario: feature → push → PR → CI aprobado → merge a develop
 - Frontend usa paginación de servidor y conserva compatibilidad del panel de notificaciones. La transferencia interna muestra el traceId como la interbancaria existente.
 - Alertmanager recibe las reglas Prometheus y llama a un endpoint interno autenticado. El token solo vive en Secrets; el pipeline reutiliza/genera uno sin publicarlo y lo instala en observability/prod. NetworkPolicy permite únicamente ese origen adicional. Sin token el receptor falla cerrado (503); una credencial incorrecta recibe 401.
 - Alertas duplicadas se identifican por fingerprint/nombre/inicio/estado; el historial y la entrega comparten el inbox/outbox. Las resoluciones generan su propio registro. El despliegue de la aplicación a producción continúa por release/main; integrar a develop no acredita que el receptor nuevo ya esté activo en prod.
+
+## Cierre y hallazgos del escenario local
+- Se añade gauge `bank.customer.kyc.current` consultando la base propia: representa clientes actualmente VERIFIED/REJECTED; el contador anterior conserva la historia de transiciones. Así un cliente que cambie de estado no se presenta como dos clientes actuales.
+- El dashboard KYC muestra el percentil del histograma acumulado desde el inicio de las réplicas, explícito en su descripción, porque las verificaciones pueden ser poco frecuentes. Los contadores de eventos usan rate para throughput.
+- Readiness de Notification depende de aplicación/DB y no del broker: auditoría consultable y recepción de alertas siguen disponibles durante su caída. Liveness permanece independiente. El consumidor se reconecta; outbox reintenta.
+- Los fallos técnicos se registran dentro de su span con tipo de excepción, correlationId y traceId; se excluye el texto crudo. Se enlaza la petición administrativa KYC con el contexto del ciclo cuando pertenecen a trazas distintas.
+- En las pruebas Java se ejecutan copias inmutables de los JAR para que recompilar no altere un proceso activo. El stack local y credenciales de prueba se mantienen fuera del repositorio.
+
+- La población KYC se consulta desde cada réplica, por lo que el dashboard toma el máximo por ambiente/estado antes de sumar ambientes; sumar réplicas duplicaría los clientes con HPA.

@@ -1,0 +1,11 @@
+{
+  "historicalEvents": 228,
+  "legacyLimit": 200,
+  "olderEventFound": true,
+  "traceSearch": true,
+  "serviceAndLevelSearch": true,
+  "unauthenticatedWebhook": 401,
+  "alertFirstDelivery": 1,
+  "alertRepeatedDelivery": 0,
+  "checkedAt": "2026-10-23T06:07:10.613530+00:00"
+}

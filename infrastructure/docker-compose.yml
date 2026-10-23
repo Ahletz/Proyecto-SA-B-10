@@ -55,6 +55,7 @@ services:
     build: { context: ../apps/customer-service }
     container_name: bank-customer-service
     environment:
+      OTEL_SDK_DISABLED: "true"
       DB_HOST: customer-db
       DB_PORT: 5432
       DB_DATABASE: bank_customer
@@ -149,6 +150,7 @@ services:
     build: { context: ../apps/notification-audit-service }
     container_name: bank-notification-audit-service
     environment:
+      OTEL_SDK_DISABLED: "true"
       DB_HOST: notification-db
       DB_PORT: 5432
       DB_DATABASE: bank_notification
