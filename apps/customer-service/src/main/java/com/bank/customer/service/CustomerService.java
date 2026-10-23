@@ -7,6 +7,8 @@ import com.bank.customer.model.KycStatus;
 import com.bank.customer.publisher.EventPublisher;
 import com.bank.customer.repository.CustomerRepository;
 import com.bank.customer.util.JwtUtil;
+import com.bank.customer.observability.CustomerLifecycle;
+import java.time.OffsetDateTime;
 import org.springframework.data.domain.Sort;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -23,8 +25,10 @@ public class CustomerService {
     private final EventPublisher publisher;
     private final PasswordEncoder passwordEncoder;
 
-    public CustomerService(CustomerRepository repo, EventPublisher publisher, PasswordEncoder passwordEncoder) {
-        this.repo = repo; this.publisher = publisher; this.passwordEncoder = passwordEncoder;
+    private final CustomerLifecycle lifecycle;
+
+    public CustomerService(CustomerRepository repo, EventPublisher publisher, PasswordEncoder passwordEncoder, CustomerLifecycle lifecycle) {
+        this.repo = repo; this.publisher = publisher; this.passwordEncoder = passwordEncoder; this.lifecycle = lifecycle;
     }
 
     @Transactional
@@ -54,6 +58,7 @@ public class CustomerService {
         c.setBirthDate(req.birthDate());
         c.setAddress(req.address().trim());
         c.setActivationToken(UUID.randomUUID().toString());
+        return lifecycle.observe(c, correlationId, "customer.register", () -> {
         repo.save(c);
 
         Map<String,Object> payload = new LinkedHashMap<>();
@@ -66,10 +71,12 @@ public class CustomerService {
         payload.put("kycStatus", c.getKycStatus().name());
         payload.put("status", c.getStatus());
         payload.put("activationToken", c.getActivationToken());
-        publisher.publish("customer.registered", payload, correlationId);
+        publisher.publish("customer.registered", payload, c.getLifecycleCorrelationId());
+        lifecycle.changed(c, "customer.registered", KycStatus.PENDING, false);
 
         return Map.of("status", "ok", "customerId", "CUST-" + c.getId(),
-            "username", c.getUsername(), "activationToken", c.getActivationToken());
+            "username", c.getUsername(), "activationToken", c.getActivationToken(), "correlationId", c.getLifecycleCorrelationId());
+        });
     }
 
     public Map<String,Object> login(LoginRequest req) {
@@ -84,8 +91,11 @@ public class CustomerService {
     @Transactional
     public void activate(String token, String correlationId) {
         Customer c = repo.findByActivationToken(token).orElseThrow(() -> new InvalidActivationTokenException("Token de activación inválido o ya usado"));
+        lifecycle.observe(c, correlationId, "customer.activate", () -> {
         c.setStatus("ACTIVE"); c.setActivationToken(null); repo.save(c);
-        publisher.publish("customer.activated", Map.of("customerId", "CUST-" + c.getId(), "username", c.getUsername(), "role", c.getRole(), "status", "ACTIVE"), correlationId);
+        publisher.publish("customer.activated", Map.of("customerId", "CUST-" + c.getId(), "username", c.getUsername(), "role", c.getRole(), "status", "ACTIVE"), c.getLifecycleCorrelationId());
+        lifecycle.changed(c, "customer.activated", null, false); return null;
+        });
     }
 
     @Transactional
@@ -141,13 +151,13 @@ public class CustomerService {
             return toResponse(customer);
         }
 
+        return lifecycle.observe(customer, correlationId, "customer.kyc.update", () -> {
+        boolean firstVerification = newStatus == KycStatus.VERIFIED && customer.getKycVerifiedAt() == null;
+        if (firstVerification) customer.setKycVerifiedAt(OffsetDateTime.now());
         customer.setKycStatus(newStatus);
         repo.save(customer);
 
-        String effectiveCorrelationId =
-            correlationId == null || correlationId.isBlank()
-                ? UUID.randomUUID().toString()
-                : correlationId;
+        String effectiveCorrelationId = customer.getLifecycleCorrelationId();
 
         Map<String,Object> payload = new LinkedHashMap<>();
         payload.put("customerId", "CUST-" + customer.getId());
@@ -163,7 +173,9 @@ public class CustomerService {
             effectiveCorrelationId
         );
 
+        lifecycle.changed(customer, "customer.kyc.status.changed", newStatus, firstVerification);
         return toResponse(customer);
+        });
     }
 
     private KycStatus parseKycStatus(String status) {
@@ -191,7 +203,7 @@ public class CustomerService {
             throw new ValidationException("customerId inválido");
         }
 
-        return repo.findById(id)
+        return repo.findForKyc(id)
             .orElseThrow(() -> new ValidationException("Cliente no encontrado"));
     }
 

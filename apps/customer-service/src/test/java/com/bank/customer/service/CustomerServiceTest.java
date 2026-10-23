@@ -15,6 +15,8 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.LocalDate;
+import com.bank.customer.observability.*;
+import io.opentelemetry.api.OpenTelemetry;
 import java.util.Map;
 import java.util.Optional;
 
@@ -38,7 +40,8 @@ class CustomerServiceTest {
         service = new CustomerService(
             repo,
             publisher,
-            encoder
+            encoder,
+            new CustomerLifecycle(new Telemetry(OpenTelemetry.noop()))
         );
     }
 
@@ -184,7 +187,7 @@ class CustomerServiceTest {
             KycStatus.PENDING
         );
 
-        when(repo.findById(12L))
+        when(repo.findForKyc(12L))
             .thenReturn(Optional.of(customer));
 
         Map<String,Object> result =
@@ -241,7 +244,7 @@ class CustomerServiceTest {
             KycStatus.PENDING
         );
 
-        when(repo.findById(15L))
+        when(repo.findForKyc(15L))
             .thenReturn(Optional.of(customer));
 
         Map<String,Object> result =
@@ -284,7 +287,7 @@ class CustomerServiceTest {
             KycStatus.VERIFIED
         );
 
-        when(repo.findById(20L))
+        when(repo.findForKyc(20L))
             .thenReturn(Optional.of(customer));
 
         Map<String,Object> result =
@@ -322,7 +325,7 @@ class CustomerServiceTest {
             30L
         );
 
-        when(repo.findById(30L))
+        when(repo.findForKyc(30L))
             .thenReturn(Optional.of(customer));
 
         ValidationException exception =
@@ -367,7 +370,7 @@ class CustomerServiceTest {
         );
 
         verify(repo, never())
-            .findById(anyLong());
+            .findForKyc(anyLong());
 
         verify(publisher, never())
             .publish(
