@@ -1,4 +1,4 @@
-  █ TOTAL RESULTS 
+  █ TOTAL RESULTS
 
     checks_total.......: 241     1.003763/s
     checks_succeeded...: 100.00% 241 out of 241
