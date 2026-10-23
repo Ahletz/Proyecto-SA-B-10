@@ -1,6 +1,6 @@
-import {Body,Controller,Delete,Get,Param,Post} from '@nestjs/common';import {ConfigService} from '@nestjs/config';import {Roles} from '../auth/roles.decorator';import {proxyJson} from './proxy.util';
+import {Body,Controller,Delete,Get,Param,Post,Query} from '@nestjs/common';import {ConfigService} from '@nestjs/config';import {Roles} from '../auth/roles.decorator';import {proxyJson} from './proxy.util';
 @Controller('api') export class AdminController{constructor(private readonly c:ConfigService){}
- @Roles('ADMIN') @Get('audit/events') audit(){return proxyJson(this.c.get('NOTIFICATION_SERVICE_URL','http://localhost:8082'),'/api/audit/events','GET');}
+ @Roles('ADMIN') @Get('audit/events') audit(@Query() q:Record<string,string>={}){return proxyJson(this.c.get('NOTIFICATION_SERVICE_URL','http://localhost:8082'),auditPath(q),'GET');}
  @Roles('ADMIN','CASHIER') @Get('payments') payments(){return proxyJson(this.c.get('PAYMENT_SERVICE_URL','http://localhost:3005'),'/api/payments','GET');}
  // Simulación de fallos de Payment en caliente (escenarios de fallo de la Fase 3), sin redesplegar.
  // Solo ADMIN; el Gateway agrega el X-Admin-Token que Payment exige (Secret bank-interbank-secret).
@@ -10,3 +10,6 @@ import {Body,Controller,Delete,Get,Param,Post} from '@nestjs/common';import {Con
  @Roles('ADMIN') @Delete('admin/payment-simulation') resetSimulation(){return this.simulationCall('DELETE');}
  private simulationCall(method:string,body?:Record<string,unknown>){const token=this.c.get<string>('PAYMENT_ADMIN_TOKEN');return proxyJson(this.c.get('PAYMENT_SERVICE_URL','http://localhost:3005'),'/internal/payment-simulation',method,body,token?{'X-Admin-Token':token}:{});}
  @Roles('ADMIN','CASHIER') @Get('payments/transaction/:id') payment(@Param('id')id:string){return proxyJson(this.c.get('PAYMENT_SERVICE_URL','http://localhost:3005'),`/api/payments/transaction/${id}`,'GET');}}
+
+// Query forwarding required by Alex's historical audit API; no changes to other routes.
+export function auditPath(q:Record<string,string>={}){const allowed=['correlationId','traceId','service','level','q','page','size','paged'];const params=new URLSearchParams(Object.entries(q).filter(([k,v])=>allowed.includes(k)&&typeof v==='string'));const query=params.toString();return '/api/audit/events'+(query?'?'+query:'');}

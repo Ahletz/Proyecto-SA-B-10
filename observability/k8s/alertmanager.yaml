@@ -1,0 +1,67 @@
+# Required connection from Prometheus alerts to Alex's Notification service.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: alertmanager-config
+data:
+  alertmanager.yml: |
+    global:
+      resolve_timeout: 5m
+    route:
+      receiver: notification-audit
+      group_by: [alertname, service_name, deployment_environment, deployment]
+      group_wait: 10s
+      group_interval: 1m
+      repeat_interval: 4h
+    receivers:
+      - name: notification-audit
+        webhook_configs:
+          - url: http://notification-audit-service.prod.svc.cluster.local:8082/internal/alerts/slo
+            send_resolved: true
+            max_alerts: 100
+            http_config:
+              authorization:
+                type: Bearer
+                credentials_file: /etc/alert-auth/token
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: alertmanager
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: alertmanager}
+  template:
+    metadata:
+      labels: {app: alertmanager}
+    spec:
+      containers:
+        - name: alertmanager
+          image: prom/alertmanager:v0.28.1
+          args: ["--config.file=/etc/alertmanager/alertmanager.yml", "--storage.path=/alertmanager"]
+          ports: [{name: http, containerPort: 9093}]
+          readinessProbe: {httpGet: {path: /-/ready, port: 9093}}
+          livenessProbe: {httpGet: {path: /-/healthy, port: 9093}, initialDelaySeconds: 10}
+          resources:
+            requests: {cpu: 25m, memory: 32Mi}
+            limits: {cpu: 150m, memory: 128Mi}
+          volumeMounts:
+            - {name: config, mountPath: /etc/alertmanager, readOnly: true}
+            - {name: auth, mountPath: /etc/alert-auth, readOnly: true}
+            - {name: data, mountPath: /alertmanager}
+      volumes:
+        - name: config
+          configMap: {name: alertmanager-config}
+        - name: auth
+          secret: {secretName: alert-webhook-auth}
+        - name: data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: alertmanager
+spec:
+  selector: {app: alertmanager}
+  ports: [{name: http, port: 9093, targetPort: 9093}]

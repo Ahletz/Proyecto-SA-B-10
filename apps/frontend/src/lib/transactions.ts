@@ -101,6 +101,7 @@ export interface TransferStatus{
 }
 
 export interface TransferAccepted{
+  traceId?:string;
   accepted:boolean;
   correlationId:string;
   eventId:string;
