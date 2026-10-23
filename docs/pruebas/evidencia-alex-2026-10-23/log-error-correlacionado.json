@@ -1,0 +1,11 @@
+{
+  "timestamp": "2026-10-23T06:44:45.346Z",
+  "serviceName": "customer-service",
+  "environment": "dev",
+  "version": "alex-local-validation",
+  "level": "ERROR",
+  "correlationId": "verification-failure-c5414cc8f015",
+  "traceId": "c0163c7c3f61de7edd0c97e0c563d676",
+  "spanId": "a0122013f21073d7",
+  "message": "Operation failed: publish customer.registered (AmqpIOException)"
+}

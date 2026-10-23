@@ -1,0 +1,7 @@
+{
+  "committedCustomers": 88,
+  "auditedRegistrations": 88,
+  "pendingOutbox": 0,
+  "failedOutbox": 0,
+  "sloAlertAudited": true
+}

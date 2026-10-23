@@ -95,4 +95,4 @@ Comportamiento real de estas alertas en carga y fallos: [postmortems](../postmor
 
 ## 7. Servicios Java
 
-Customer y Notification & Audit (Spring Boot) todavía **no exportan métricas a Prometheus**: no aparecen en `http_server_request_duration_seconds` ni en `bank_*`. Su instrumentación es parte del trabajo de Integrante 2; cuando llegue, sus métricas deben seguir este mismo catálogo.
+Customer y Notification & Audit exportan OTLP desde SDK Java: HTTP, operaciones, eventos y métricas KYC (`bank_customer_kyc_current`, `bank_customer_kyc_total`, `bank_customer_kyc_verification_duration_seconds`). Ver [implementación y semántica de Alex](alex-fase3.md). Los logs siguen por stdout y agente hacia Loki. La validación productiva de la aplicación requiere la promoción normal por release/main.

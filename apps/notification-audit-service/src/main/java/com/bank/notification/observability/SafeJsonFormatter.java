@@ -11,6 +11,7 @@ public class SafeJsonFormatter implements StructuredLogFormatter<ILoggingEvent> 
     private final ObjectMapper mapper = new ObjectMapper();
     public static String redact(String text) {
         if (text == null) return "";
+        if (java.util.regex.Pattern.compile("(?i)(password|activationToken|documentPhoto|documentNumber|fullName|address|apiKey|x-api-key|authorization|jwt|token|email)[\"']?\\s*[:=]").matcher(text).find()) return "Sensitive details omitted";
         if (text.contains("RegisterRequest") || text.contains("LoginRequest") || text.contains("UpdateCustomerRequest")
                 || text.contains("rejected value")) return "Sensitive request details omitted";
         return text.replaceAll("[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+[.][A-Za-z]{2,}", "[email omitted]")

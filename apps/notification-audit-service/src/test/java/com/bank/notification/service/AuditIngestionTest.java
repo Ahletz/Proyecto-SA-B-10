@@ -21,7 +21,7 @@ class AuditIngestionTest {
         assertTrue(ingestion.ingest(event()));verify(outbox,times(2)).save(any(NotificationOutbox.class));verify(jdbc,times(2)).update(anyString(),any(Object[].class));
     }
     @Test void auditProjectionDropsSecretsRecursively() throws Exception {
-        var safe=AuditPayload.sanitize(event().path("payload"));assertTrue(safe.has("customerId"));assertFalse(safe.has("email"));assertFalse(safe.has("activationToken"));
+        var safe=AuditPayload.sanitize(event().path("payload"));assertTrue(safe.has("customerId"));assertFalse(safe.has("email"));assertFalse(safe.has("activationToken"));assertEquals("api-gateway",AuditPayload.service("transaction.transfer.requested"));
     }
     @Test void accountAnomalyHasWarningClassification() throws Exception {
         var result=new EventClassificationService().classify("account.anomaly.detected",new ObjectMapper().readTree("{\"accountId\":\"acc-1\"}"));assertEquals(NotificationSeverity.WARNING,result.severity());

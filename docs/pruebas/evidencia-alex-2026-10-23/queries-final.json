@@ -1,0 +1,92 @@
+{
+  "customerOperations": [
+    {
+      "metric": {
+        "__name__": "bank_operations_total",
+        "deployment_environment": "dev",
+        "exported_job": "customer-service",
+        "instance": "127.0.0.1:32786",
+        "job": "otel-collector",
+        "operation": "customer.kyc.update",
+        "outcome": "success",
+        "service_name": "customer-service",
+        "service_version": "alex-local-validation",
+        "telemetry_sdk_language": "java",
+        "telemetry_sdk_name": "opentelemetry",
+        "telemetry_sdk_version": "1.55.0"
+      },
+      "value": [
+        1792737163.754,
+        "1"
+      ]
+    },
+    {
+      "metric": {
+        "__name__": "bank_operations_total",
+        "deployment_environment": "dev",
+        "exported_job": "customer-service",
+        "instance": "127.0.0.1:32786",
+        "job": "otel-collector",
+        "operation": "customer.register",
+        "outcome": "success",
+        "service_name": "customer-service",
+        "service_version": "alex-local-validation",
+        "telemetry_sdk_language": "java",
+        "telemetry_sdk_name": "opentelemetry",
+        "telemetry_sdk_version": "1.55.0"
+      },
+      "value": [
+        1792737163.754,
+        "176"
+      ]
+    },
+    {
+      "metric": {
+        "__name__": "bank_operations_total",
+        "deployment_environment": "dev",
+        "exported_job": "customer-service",
+        "instance": "127.0.0.1:32786",
+        "job": "otel-collector",
+        "operation": "customer.register",
+        "outcome": "technical_error",
+        "service_name": "customer-service",
+        "service_version": "alex-local-validation",
+        "telemetry_sdk_language": "java",
+        "telemetry_sdk_name": "opentelemetry",
+        "telemetry_sdk_version": "1.55.0"
+      },
+      "value": [
+        1792737163.754,
+        "307"
+      ]
+    }
+  ],
+  "burnRate": [
+    {
+      "metric": {
+        "__name__": "bank:burn_rate:1h",
+        "service_name": "customer-service"
+      },
+      "value": [
+        1792737163.754,
+        "634.8547717842323"
+      ]
+    }
+  ],
+  "alert": [
+    {
+      "metric": {
+        "__name__": "ALERTS",
+        "alertname": "SloBurnRateFast",
+        "alertstate": "firing",
+        "service_name": "customer-service",
+        "severity": "critical",
+        "slo": "availability"
+      },
+      "value": [
+        1792737163.755,
+        "1"
+      ]
+    }
+  ]
+}

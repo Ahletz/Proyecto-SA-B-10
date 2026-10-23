@@ -27,6 +27,9 @@ public class Telemetry {
             .setAttribute("messaging.system", "rabbitmq").setAttribute("messaging.operation.type", "publish")
             .setAttribute("messaging.destination.name", "bank.events")
             .setAttribute("messaging.rabbitmq.destination.routing_key", name.substring(8));
+        var requestContext = Span.current().getSpanContext();
+        var parentContext = Span.fromContext(parent).getSpanContext();
+        if (requestContext.isValid() && parentContext.isValid() && !requestContext.getTraceId().equals(parentContext.getTraceId())) builder.addLink(requestContext);
         Span span = builder.startSpan();
         long start = System.nanoTime();
         String outcome = "success";
@@ -38,9 +41,15 @@ public class Telemetry {
             // Exception text may contain customer data: export only its class.
             outcome = ex.getClass().getPackageName().endsWith(".exception") || ex instanceof IllegalArgumentException
                 ? "business_rejection" : "technical_error";
-            if (outcome.equals("technical_error")) span.setStatus(StatusCode.ERROR, ex.getClass().getSimpleName());
+            if (outcome.equals("technical_error")) {
+                span.setStatus(StatusCode.ERROR, ex.getClass().getSimpleName());
+                try (Scope failedScope = span.makeCurrent()) {
+                    org.slf4j.LoggerFactory.getLogger(Telemetry.class).error("Operation failed: {} ({})", name, ex.getClass().getSimpleName());
+                }
+            }
             throw ex;
         } finally {
+            span.setAttribute("bank.operation.outcome",outcome);
             if (previous == null) MDC.remove("correlationId"); else MDC.put("correlationId", previous);
             if (!name.startsWith("publish ")) {
                 operations.add(1, io.opentelemetry.api.common.Attributes.builder().put("operation",name).put("outcome",outcome).build());

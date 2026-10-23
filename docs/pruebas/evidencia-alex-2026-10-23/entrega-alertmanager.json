@@ -1,0 +1,9 @@
+{
+  "alertmanagerApiStatus": 200,
+  "receiver": "Notification & Audit",
+  "auditRows": 1,
+  "severity": "WARNING",
+  "traceId": "3bd00202e24e556085e834130d6d6839",
+  "correlationId": "slo-42fbfb9b-c5b3-3370-8a1d-da80c3d970b1",
+  "checkedAt": "2026-10-23T06:10:32.077843+00:00"
+}

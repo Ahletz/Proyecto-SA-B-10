@@ -14,5 +14,6 @@ public interface CustomerRepository extends JpaRepository<Customer, Long> {
     Optional<Customer> findByUsername(String username);
     Optional<Customer> findByActivationToken(String activationToken);
     Optional<Customer> findByDocumentNumber(String documentNumber);
+    long countByKycStatus(KycStatus status);
     List<Customer> findByKycStatusOrderByIdAsc(KycStatus kycStatus);
 }

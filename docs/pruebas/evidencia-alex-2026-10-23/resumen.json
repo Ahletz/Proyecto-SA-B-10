@@ -1,0 +1,13 @@
+{
+  "requests": 241,
+  "accepted": 88,
+  "failed": 153,
+  "httpErrorPercent": 63.48547717842323,
+  "p95AllMs": 291.12,
+  "p95AcceptedMs": 376.47,
+  "brokerUnavailableSeconds": 153.70000000000002,
+  "alertPendingAfterStart": 50.1,
+  "alertFiringAfterStart": 170.2,
+  "alertFiringAfterOutage": 139.0,
+  "scope": "local aislado; sin cloud, saldos ni HPA"
+}
