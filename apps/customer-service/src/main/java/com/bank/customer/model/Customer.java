@@ -21,7 +21,7 @@ public class Customer {
     @Column(
         name = "kyc_status",
         nullable = false,
-        columnDefinition = "varchar(20) default 'PENDING'"
+        length = 20
     )
     private KycStatus kycStatus = KycStatus.PENDING;
 
@@ -33,6 +33,15 @@ public class Customer {
     @Column(name = "created_at", nullable = false) private OffsetDateTime createdAt = OffsetDateTime.now();
     @Column(name = "activation_token", unique = true) private String activationToken;
 
+    @Column(name = "lifecycle_correlation_id", length = 128) private String lifecycleCorrelationId;
+    @Column(name = "lifecycle_traceparent", length = 55) private String lifecycleTraceparent;
+    @Column(name = "kyc_verified_at") private OffsetDateTime kycVerifiedAt;
+    public String getLifecycleCorrelationId() { return lifecycleCorrelationId; }
+    public String getLifecycleTraceparent() { return lifecycleTraceparent; }
+    public OffsetDateTime getKycVerifiedAt() { return kycVerifiedAt; }
+    public void setLifecycleCorrelationId(String value) { lifecycleCorrelationId = value; }
+    public void setLifecycleTraceparent(String value) { lifecycleTraceparent = value; }
+    public void setKycVerifiedAt(OffsetDateTime value) { kycVerifiedAt = value; }
     public Customer() {}
 
     public Long getId() { return id; }

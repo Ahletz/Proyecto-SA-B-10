@@ -1,0 +1,33 @@
+  █ TOTAL RESULTS
+
+    checks_total.......: 241     1.003763/s
+    checks_succeeded...: 100.00% 241 out of 241
+    checks_failed......: 0.00%   0 out of 241
+
+    ✓ controlled response
+
+    CUSTOM
+    customer_registration_accepted...: 88     0.366519/s
+    customer_registration_failed.....: 153    0.637243/s
+
+    HTTP
+    http_req_duration................: p(50)=86.17ms p(95)=291.12ms p(99)=548.35ms min=79.22ms max=789.16ms
+      { expected_response:true }.....: p(50)=114.1ms p(95)=376.47ms p(99)=692ms    min=86.17ms max=789.16ms
+    http_req_failed..................: 63.48% 153 out of 241
+    http_reqs........................: 241    1.003763/s
+
+    EXECUTION
+    iteration_duration...............: p(50)=86.55ms p(95)=291.53ms p(99)=548.72ms min=79.61ms max=789.42ms
+    iterations.......................: 241    1.003763/s
+    vus..............................: 0      min=0          max=0
+    vus_max..........................: 4      min=4          max=4
+
+    NETWORK
+    data_received....................: 134 kB 559 B/s
+    data_sent........................: 107 kB 446 B/s
+
+
+
+
+running (4m00.1s), 00/04 VUs, 241 complete and 0 interrupted iterations
+customers ✓ [ 100% ] 00/04 VUs  4m0s  1.00 iters/s

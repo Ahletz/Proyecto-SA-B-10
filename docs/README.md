@@ -84,3 +84,11 @@ Sobre la base de la Fase 1, la solución incluye:
 ![Despliegue](assets/diagramas/deployment-fase3.png)
 
 ![Saga](assets/diagramas/saga-success.png)
+
+## Fase 3 — Customer y Notification & Audit
+
+- [Implementación y validación de Alex](observabilidad/alex-fase3.md)
+- [Decisiones registradas](observabilidad/decisiones-alex-fase3.md)
+- [Postmortem local del broker](postmortems/2026-10-23-alex-broker-local.md)
+
+- [Pendientes compartidos de Fase 3](observabilidad/pendientes-compartidos-fase3.md): diferencias con el enunciado y criterios de cierre.

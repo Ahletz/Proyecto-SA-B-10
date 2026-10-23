@@ -1,6 +1,7 @@
 package com.bank.notification.publisher;
 
 import com.bank.notification.model.NotificationSeverity;
+import com.bank.notification.observability.Telemetry;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
@@ -21,9 +22,10 @@ public class NotificationEventPublisher {
     private final ObjectMapper objectMapper =
         new ObjectMapper().findAndRegisterModules();
 
+    private final Telemetry telemetry;
     public NotificationEventPublisher(
-            RabbitTemplate rabbitTemplate) {
-        this.rabbitTemplate = rabbitTemplate;
+            RabbitTemplate rabbitTemplate, Telemetry telemetry) {
+        this.rabbitTemplate = rabbitTemplate; this.telemetry=telemetry;
     }
 
     public void publishClassified(
@@ -75,15 +77,18 @@ public class NotificationEventPublisher {
         );
         envelope.put("payload", payload);
 
+        telemetry.span("publish notification.classified",io.opentelemetry.context.Context.current(),correlationId,()->{
         try {
             String body =
                 objectMapper.writeValueAsString(envelope);
 
-            rabbitTemplate.convertAndSend(
+            rabbitTemplate.invoke(operations -> {
+            operations.convertAndSend(
                 EXCHANGE,
                 "notification.classified",
                 body,
                 amqpMessage -> {
+                    telemetry.headers().forEach((k,v)->amqpMessage.getMessageProperties().setHeader(k,v));
                     amqpMessage
                         .getMessageProperties()
                         .setHeader(
@@ -107,6 +112,8 @@ public class NotificationEventPublisher {
                     return amqpMessage;
                 }
             );
+            operations.waitForConfirmsOrDie(5000); return null;
+            });
 
         } catch (JsonProcessingException exception) {
             throw new IllegalStateException(
@@ -114,5 +121,7 @@ public class NotificationEventPublisher {
                 exception
             );
         }
+        return null;
+        });
     }
 }

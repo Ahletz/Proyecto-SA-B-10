@@ -1,0 +1,59 @@
+[
+  {
+    "eventId": "36228c45-fb4c-3a10-b9d2-1cd49b17bd05",
+    "eventType": "slo.alert.received",
+    "version": 1,
+    "correlationId": "slo-36228c45-fb4c-3a10-b9d2-1cd49b17bd05",
+    "eventTimestamp": "2026-10-23T06:31:30.514185Z",
+    "processedAt": "2026-10-23T06:31:30.514973Z",
+    "severity": "WARNING",
+    "origin": "slo",
+    "message": "Alerta SloBurnRateFast: firing",
+    "payload": {
+      "alertname": "SloBurnRateFast",
+      "alertStatus": "firing",
+      "serviceName": "notification-audit-service"
+    },
+    "traceId": "39735db7b83a7b69f08fe910e4ac1de4",
+    "spanId": "38af38a1308482c8",
+    "serviceName": "alertmanager"
+  },
+  {
+    "eventId": "19fc5b79-36df-3ed6-98f4-3a6fc7a4c8da",
+    "eventType": "slo.alert.received",
+    "version": 1,
+    "correlationId": "slo-19fc5b79-36df-3ed6-98f4-3a6fc7a4c8da",
+    "eventTimestamp": "2026-10-23T06:31:00.487386Z",
+    "processedAt": "2026-10-23T06:31:00.488473Z",
+    "severity": "WARNING",
+    "origin": "slo",
+    "message": "Alerta SloBurnRateFast: firing",
+    "payload": {
+      "alertname": "SloBurnRateFast",
+      "alertStatus": "firing",
+      "serviceName": "customer-service"
+    },
+    "traceId": "eef0829f623f9c880a823a0649c424f4",
+    "spanId": "147e9dcc6c9473a2",
+    "serviceName": "alertmanager"
+  },
+  {
+    "eventId": "c1628ed5-cb41-3672-93a0-0e6689a0f857",
+    "eventType": "slo.alert.received",
+    "version": 1,
+    "correlationId": "slo-c1628ed5-cb41-3672-93a0-0e6689a0f857",
+    "eventTimestamp": "2026-10-23T06:07:10.555474Z",
+    "processedAt": "2026-10-23T06:07:10.55688Z",
+    "severity": "WARNING",
+    "origin": "slo",
+    "message": "Alerta SloBurnRateFast: firing",
+    "payload": {
+      "alertname": "SloBurnRateFast",
+      "alertStatus": "firing",
+      "serviceName": "customer-service"
+    },
+    "traceId": "5699b4a8faa5f7d504e96ea2bdb1dcdf",
+    "spanId": "61855f2026beded0",
+    "serviceName": "alertmanager"
+  }
+]

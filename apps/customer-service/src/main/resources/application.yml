@@ -1,4 +1,6 @@
 spring:
+  main:
+    banner-mode: "off"
   datasource:
     url: jdbc:postgresql://${CUSTOMER_DB_HOST:${DB_HOST:localhost}}:${CUSTOMER_DB_PORT:${DB_PORT:5433}}/${CUSTOMER_DB_NAME:${DB_DATABASE:bank_customer}}
     username: ${CUSTOMER_DB_USER:${DB_USERNAME:customer_user}}
@@ -6,7 +8,7 @@ spring:
   jpa:
     hibernate:
       ddl-auto: update
-    show-sql: true
+    show-sql: false
 
   rabbitmq:
     host: ${RABBITMQ_HOST:localhost}
@@ -28,3 +30,13 @@ management:
 jwt:
   secret: ${JWT_SECRET:default-secret-change-me}
   expiration-ms: ${JWT_EXPIRATION_MS:3600000}
+
+logging:
+  level:
+    root: INFO
+    org.springframework.web: INFO
+    org.springframework.jdbc: INFO
+    org.hibernate.SQL: OFF
+  structured:
+    format:
+      console: com.bank.customer.observability.SafeJsonFormatter

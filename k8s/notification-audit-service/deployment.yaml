@@ -14,6 +14,9 @@ spec:
           ports: [{ containerPort: 8082 }]
           envFrom: [{ configMapRef: { name: bank-app-info } }]
           env:
+            - name: ALERT_WEBHOOK_TOKEN
+              valueFrom:
+                secretKeyRef: {name: alert-webhook-auth, key: token, optional: true}
             # Pool por réplica (db-f1-micro ~25 conexiones; HPA hasta 5 réplicas: 5 x 4 = 20).
             - { name: SPRING_DATASOURCE_HIKARI_MAXIMUMPOOLSIZE, value: "4" }
             - { name: DB_HOST, valueFrom: { configMapKeyRef: { name: bank-db-config, key: NOTIF_DB_HOST } } }
@@ -28,7 +31,7 @@ spec:
             - { name: SMTP_HOST, value: mailhog }
             - { name: SMTP_PORT, value: "1025" }
             - { name: FRONTEND_URL, value: "http://localhost:30000" }
-          readinessProbe: { httpGet: { path: /actuator/health, port: 8082 }, periodSeconds: 5, timeoutSeconds: 3 }
+          readinessProbe: { httpGet: { path: /actuator/health/readiness, port: 8082 }, periodSeconds: 5, timeoutSeconds: 3 }
           livenessProbe: { httpGet: { path: /actuator/health/liveness, port: 8082 }, periodSeconds: 10, failureThreshold: 3 }
           # Hasta 180 s para que arranque Spring; mientras tanto no corren readiness ni liveness.
           startupProbe: { httpGet: { path: /actuator/health/liveness, port: 8082 }, periodSeconds: 5, failureThreshold: 36 }

@@ -1,6 +1,6 @@
 import type { ConfigService } from '@nestjs/config';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { AdminController } from './admin.controller';
+import { AdminController,auditPath } from './admin.controller';
 
 describe('AdminController - simulación de fallos de Payment', () => {
   afterEach(() => vi.unstubAllGlobals());
@@ -21,3 +21,5 @@ describe('AdminController - simulación de fallos de Payment', () => {
     expect((calls[0].init.headers as Record<string, string>)['X-Admin-Token']).toBe('tok');
   });
 });
+
+describe('Audit filters',()=>{it('forwards encoded filters and rejects unrelated query keys',()=>{expect(auditPath({correlationId:'a&b',traceId:'123',paged:'true',unknown:'x'})).toBe('/api/audit/events?correlationId=a%26b&traceId=123&paged=true');});});

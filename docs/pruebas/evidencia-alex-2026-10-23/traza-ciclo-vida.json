@@ -1,0 +1,724 @@
+{
+  "batches": [
+    {
+      "resource": {
+        "attributes": [
+          {
+            "key": "deployment.environment",
+            "value": {
+              "stringValue": "dev"
+            }
+          },
+          {
+            "key": "service.version",
+            "value": {
+              "stringValue": "alex-local-validation"
+            }
+          },
+          {
+            "key": "telemetry.sdk.language",
+            "value": {
+              "stringValue": "java"
+            }
+          },
+          {
+            "key": "telemetry.sdk.name",
+            "value": {
+              "stringValue": "opentelemetry"
+            }
+          },
+          {
+            "key": "telemetry.sdk.version",
+            "value": {
+              "stringValue": "1.55.0"
+            }
+          },
+          {
+            "key": "service.name",
+            "value": {
+              "stringValue": "customer-service"
+            }
+          }
+        ]
+      },
+      "scopeSpans": [
+        {
+          "scope": {
+            "name": "bank-usac"
+          },
+          "spans": [
+            {
+              "traceId": "0Zp+15BjSde+SMH7Px4PQg==",
+              "spanId": "to0aMf/gpcE=",
+              "parentSpanId": "FLlrgf3U2Rc=",
+              "name": "publish customer.registered",
+              "kind": "SPAN_KIND_PRODUCER",
+              "startTimeUnixNano": "1792737751417746889",
+              "endTimeUnixNano": "1792737751430811256",
+              "attributes": [
+                {
+                  "key": "messaging.destination.name",
+                  "value": {
+                    "stringValue": "bank.events"
+                  }
+                },
+                {
+                  "key": "bank.correlation_id",
+                  "value": {
+                    "stringValue": "lifecycle-1792737750"
+                  }
+                },
+                {
+                  "key": "messaging.operation.type",
+                  "value": {
+                    "stringValue": "publish"
+                  }
+                },
+                {
+                  "key": "messaging.system",
+                  "value": {
+                    "stringValue": "rabbitmq"
+                  }
+                },
+                {
+                  "key": "bank.operation.outcome",
+                  "value": {
+                    "stringValue": "success"
+                  }
+                },
+                {
+                  "key": "messaging.rabbitmq.destination.routing_key",
+                  "value": {
+                    "stringValue": "customer.registered"
+                  }
+                }
+              ],
+              "status": {}
+            },
+            {
+              "traceId": "0Zp+15BjSde+SMH7Px4PQg==",
+              "spanId": "FLlrgf3U2Rc=",
+              "parentSpanId": "hpE1Z/rrvs8=",
+              "name": "customer.register",
+              "kind": "SPAN_KIND_INTERNAL",
+              "startTimeUnixNano": "1792737751332939205",
+              "endTimeUnixNano": "1792737751436860113",
+              "attributes": [
+                {
+                  "key": "bank.correlation_id",
+                  "value": {
+                    "stringValue": "lifecycle-1792737750"
+                  }
+                },
+                {
+                  "key": "bank.operation.outcome",
+                  "value": {
+                    "stringValue": "success"
+                  }
+                }
+              ],
+              "status": {}
+            },
+            {
+              "traceId": "0Zp+15BjSde+SMH7Px4PQg==",
+              "spanId": "hpE1Z/rrvs8=",
+              "parentSpanId": "EjRWeJCrze8=",
+              "name": "POST /api/customers/register",
+              "kind": "SPAN_KIND_SERVER",
+              "startTimeUnixNano": "1792737750783141173",
+              "endTimeUnixNano": "1792737751497803212",
+              "attributes": [
+                {
+                  "key": "http.response.status_code",
+                  "value": {
+                    "intValue": "200"
+                  }
+                },
+                {
+                  "key": "bank.correlation_id",
+                  "value": {
+                    "stringValue": "lifecycle-1792737750"
+                  }
+                },
+                {
+                  "key": "http.route",
+                  "value": {
+                    "stringValue": "/api/customers/register"
+                  }
+                },
+                {
+                  "key": "http.request.method",
+                  "value": {
+                    "stringValue": "POST"
+                  }
+                }
+              ],
+              "status": {}
+            },
+            {
+              "traceId": "0Zp+15BjSde+SMH7Px4PQg==",
+              "spanId": "5dH75Luy4GQ=",
+              "parentSpanId": "0+vgR0Lfz5Y=",
+              "name": "publish customer.kyc.status.changed",
+              "kind": "SPAN_KIND_PRODUCER",
+              "startTimeUnixNano": "1792737752064046024",
+              "endTimeUnixNano": "1792737752064790748",
+              "attributes": [
+                {
+                  "key": "messaging.destination.name",
+                  "value": {
+                    "stringValue": "bank.events"
+                  }
+                },
+                {
+                  "key": "bank.correlation_id",
+                  "value": {
+                    "stringValue": "lifecycle-1792737750"
+                  }
+                },
+                {
+                  "key": "messaging.operation.type",
+                  "value": {
+                    "stringValue": "publish"
+                  }
+                },
+                {
+                  "key": "messaging.system",
+                  "value": {
+                    "stringValue": "rabbitmq"
+                  }
+                },
+                {
+                  "key": "bank.operation.outcome",
+                  "value": {
+                    "stringValue": "success"
+                  }
+                },
+                {
+                  "key": "messaging.rabbitmq.destination.routing_key",
+                  "value": {
+                    "stringValue": "customer.kyc.status.changed"
+                  }
+                }
+              ],
+              "status": {}
+            },
+            {
+              "traceId": "0Zp+15BjSde+SMH7Px4PQg==",
+              "spanId": "0+vgR0Lfz5Y=",
+              "parentSpanId": "FLlrgf3U2Rc=",
+              "name": "customer.kyc.update",
+              "kind": "SPAN_KIND_INTERNAL",
+              "startTimeUnixNano": "1792737752059805043",
+              "endTimeUnixNano": "1792737752065677754",
+              "attributes": [
+                {
+                  "key": "bank.correlation_id",
+                  "value": {
+                    "stringValue": "lifecycle-1792737750"
+                  }
+                },
+                {
+                  "key": "bank.operation.outcome",
+                  "value": {
+                    "stringValue": "success"
+                  }
+                }
+              ],
+              "links": [
+                {
+                  "traceId": "U/wKsOw39n28pOLTUSFy/Q==",
+                  "spanId": "zDKq5ngJyUQ="
+                }
+              ],
+              "status": {}
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "resource": {
+        "attributes": [
+          {
+            "key": "deployment.environment",
+            "value": {
+              "stringValue": "dev"
+            }
+          },
+          {
+            "key": "service.version",
+            "value": {
+              "stringValue": "alex-local-validation"
+            }
+          },
+          {
+            "key": "telemetry.sdk.language",
+            "value": {
+              "stringValue": "java"
+            }
+          },
+          {
+            "key": "telemetry.sdk.name",
+            "value": {
+              "stringValue": "opentelemetry"
+            }
+          },
+          {
+            "key": "telemetry.sdk.version",
+            "value": {
+              "stringValue": "1.55.0"
+            }
+          },
+          {
+            "key": "service.name",
+            "value": {
+              "stringValue": "notification-audit-service"
+            }
+          }
+        ]
+      },
+      "scopeSpans": [
+        {
+          "scope": {
+            "name": "bank-usac"
+          },
+          "spans": [
+            {
+              "traceId": "0Zp+15BjSde+SMH7Px4PQg==",
+              "spanId": "AE1YmkKx7rM=",
+              "parentSpanId": "to0aMf/gpcE=",
+              "name": "process customer.registered",
+              "kind": "SPAN_KIND_CONSUMER",
+              "startTimeUnixNano": "1792737751467185900",
+              "endTimeUnixNano": "1792737751874134112",
+              "attributes": [
+                {
+                  "key": "messaging.system",
+                  "value": {
+                    "stringValue": "rabbitmq"
+                  }
+                },
+                {
+                  "key": "messaging.operation.type",
+                  "value": {
+                    "stringValue": "process"
+                  }
+                },
+                {
+                  "key": "bank.event.type",
+                  "value": {
+                    "stringValue": "customer.registered"
+                  }
+                },
+                {
+                  "key": "bank.correlation_id",
+                  "value": {
+                    "stringValue": "lifecycle-1792737750"
+                  }
+                },
+                {
+                  "key": "messaging.destination.name",
+                  "value": {
+                    "stringValue": "bank.events"
+                  }
+                }
+              ],
+              "status": {}
+            },
+            {
+              "traceId": "0Zp+15BjSde+SMH7Px4PQg==",
+              "spanId": "0O3av6JrNDM=",
+              "parentSpanId": "5dH75Luy4GQ=",
+              "name": "process customer.kyc.status.changed",
+              "kind": "SPAN_KIND_CONSUMER",
+              "startTimeUnixNano": "1792737752073465525",
+              "endTimeUnixNano": "1792737752119716528",
+              "attributes": [
+                {
+                  "key": "messaging.system",
+                  "value": {
+                    "stringValue": "rabbitmq"
+                  }
+                },
+                {
+                  "key": "messaging.operation.type",
+                  "value": {
+                    "stringValue": "process"
+                  }
+                },
+                {
+                  "key": "bank.event.type",
+                  "value": {
+                    "stringValue": "customer.kyc.status.changed"
+                  }
+                },
+                {
+                  "key": "bank.correlation_id",
+                  "value": {
+                    "stringValue": "lifecycle-1792737750"
+                  }
+                },
+                {
+                  "key": "messaging.destination.name",
+                  "value": {
+                    "stringValue": "bank.events"
+                  }
+                }
+              ],
+              "status": {}
+            },
+            {
+              "traceId": "0Zp+15BjSde+SMH7Px4PQg==",
+              "spanId": "g26ABs2wwCg=",
+              "parentSpanId": "EjRWeJCrze8=",
+              "name": "process account.anomaly.detected",
+              "kind": "SPAN_KIND_CONSUMER",
+              "startTimeUnixNano": "1792737752246068492",
+              "endTimeUnixNano": "1792737752300048846",
+              "attributes": [
+                {
+                  "key": "messaging.system",
+                  "value": {
+                    "stringValue": "rabbitmq"
+                  }
+                },
+                {
+                  "key": "messaging.operation.type",
+                  "value": {
+                    "stringValue": "process"
+                  }
+                },
+                {
+                  "key": "bank.event.type",
+                  "value": {
+                    "stringValue": "account.anomaly.detected"
+                  }
+                },
+                {
+                  "key": "bank.correlation_id",
+                  "value": {
+                    "stringValue": "anomaly-1792737750"
+                  }
+                },
+                {
+                  "key": "messaging.destination.name",
+                  "value": {
+                    "stringValue": "bank.events"
+                  }
+                }
+              ],
+              "status": {}
+            },
+            {
+              "traceId": "0Zp+15BjSde+SMH7Px4PQg==",
+              "spanId": "bULQO4FCQEc=",
+              "parentSpanId": "EjRWeJCrze8=",
+              "name": "process account.anomaly.detected",
+              "kind": "SPAN_KIND_CONSUMER",
+              "startTimeUnixNano": "1792737752233995760",
+              "endTimeUnixNano": "1792737752301382816",
+              "attributes": [
+                {
+                  "key": "messaging.system",
+                  "value": {
+                    "stringValue": "rabbitmq"
+                  }
+                },
+                {
+                  "key": "messaging.operation.type",
+                  "value": {
+                    "stringValue": "process"
+                  }
+                },
+                {
+                  "key": "bank.event.type",
+                  "value": {
+                    "stringValue": "account.anomaly.detected"
+                  }
+                },
+                {
+                  "key": "bank.correlation_id",
+                  "value": {
+                    "stringValue": "anomaly-1792737750"
+                  }
+                },
+                {
+                  "key": "messaging.destination.name",
+                  "value": {
+                    "stringValue": "bank.events"
+                  }
+                }
+              ],
+              "status": {}
+            },
+            {
+              "traceId": "0Zp+15BjSde+SMH7Px4PQg==",
+              "spanId": "JNiQm2xbiHY=",
+              "parentSpanId": "fb1aR8li028=",
+              "name": "publish notification.classified",
+              "kind": "SPAN_KIND_PRODUCER",
+              "startTimeUnixNano": "1792737752289770802",
+              "endTimeUnixNano": "1792737752327703413",
+              "attributes": [
+                {
+                  "key": "messaging.system",
+                  "value": {
+                    "stringValue": "rabbitmq"
+                  }
+                },
+                {
+                  "key": "messaging.operation.type",
+                  "value": {
+                    "stringValue": "publish"
+                  }
+                },
+                {
+                  "key": "messaging.rabbitmq.destination.routing_key",
+                  "value": {
+                    "stringValue": "notification.classified"
+                  }
+                },
+                {
+                  "key": "bank.operation.outcome",
+                  "value": {
+                    "stringValue": "success"
+                  }
+                },
+                {
+                  "key": "bank.correlation_id",
+                  "value": {
+                    "stringValue": "lifecycle-1792737750"
+                  }
+                },
+                {
+                  "key": "messaging.destination.name",
+                  "value": {
+                    "stringValue": "bank.events"
+                  }
+                }
+              ],
+              "status": {}
+            },
+            {
+              "traceId": "0Zp+15BjSde+SMH7Px4PQg==",
+              "spanId": "fb1aR8li028=",
+              "parentSpanId": "AE1YmkKx7rM=",
+              "name": "notification.deliver",
+              "kind": "SPAN_KIND_INTERNAL",
+              "startTimeUnixNano": "1792737752277651543",
+              "endTimeUnixNano": "1792737752328024028",
+              "attributes": [
+                {
+                  "key": "bank.operation.outcome",
+                  "value": {
+                    "stringValue": "success"
+                  }
+                },
+                {
+                  "key": "bank.correlation_id",
+                  "value": {
+                    "stringValue": "lifecycle-1792737750"
+                  }
+                }
+              ],
+              "status": {}
+            },
+            {
+              "traceId": "0Zp+15BjSde+SMH7Px4PQg==",
+              "spanId": "SJg0QsR/pIU=",
+              "parentSpanId": "AE1YmkKx7rM=",
+              "name": "notification.deliver",
+              "kind": "SPAN_KIND_INTERNAL",
+              "startTimeUnixNano": "1792737752369669308",
+              "endTimeUnixNano": "1792737752583472935",
+              "attributes": [
+                {
+                  "key": "bank.operation.outcome",
+                  "value": {
+                    "stringValue": "success"
+                  }
+                },
+                {
+                  "key": "bank.correlation_id",
+                  "value": {
+                    "stringValue": "lifecycle-1792737750"
+                  }
+                }
+              ],
+              "status": {}
+            },
+            {
+              "traceId": "0Zp+15BjSde+SMH7Px4PQg==",
+              "spanId": "iHd7v2/x61s=",
+              "parentSpanId": "jNLl3lp3LSg=",
+              "name": "publish notification.classified",
+              "kind": "SPAN_KIND_PRODUCER",
+              "startTimeUnixNano": "1792737752628516461",
+              "endTimeUnixNano": "1792737752632512169",
+              "attributes": [
+                {
+                  "key": "messaging.system",
+                  "value": {
+                    "stringValue": "rabbitmq"
+                  }
+                },
+                {
+                  "key": "messaging.operation.type",
+                  "value": {
+                    "stringValue": "publish"
+                  }
+                },
+                {
+                  "key": "messaging.rabbitmq.destination.routing_key",
+                  "value": {
+                    "stringValue": "notification.classified"
+                  }
+                },
+                {
+                  "key": "bank.operation.outcome",
+                  "value": {
+                    "stringValue": "success"
+                  }
+                },
+                {
+                  "key": "bank.correlation_id",
+                  "value": {
+                    "stringValue": "lifecycle-1792737750"
+                  }
+                },
+                {
+                  "key": "messaging.destination.name",
+                  "value": {
+                    "stringValue": "bank.events"
+                  }
+                }
+              ],
+              "status": {}
+            },
+            {
+              "traceId": "0Zp+15BjSde+SMH7Px4PQg==",
+              "spanId": "jNLl3lp3LSg=",
+              "parentSpanId": "0O3av6JrNDM=",
+              "name": "notification.deliver",
+              "kind": "SPAN_KIND_INTERNAL",
+              "startTimeUnixNano": "1792737752620936205",
+              "endTimeUnixNano": "1792737752632598844",
+              "attributes": [
+                {
+                  "key": "bank.operation.outcome",
+                  "value": {
+                    "stringValue": "success"
+                  }
+                },
+                {
+                  "key": "bank.correlation_id",
+                  "value": {
+                    "stringValue": "lifecycle-1792737750"
+                  }
+                }
+              ],
+              "status": {}
+            },
+            {
+              "traceId": "0Zp+15BjSde+SMH7Px4PQg==",
+              "spanId": "RrK2N8v/OI4=",
+              "parentSpanId": "7KOISJ5jSLw=",
+              "name": "publish notification.classified",
+              "kind": "SPAN_KIND_PRODUCER",
+              "startTimeUnixNano": "1792737752657637429",
+              "endTimeUnixNano": "1792737752661392573",
+              "attributes": [
+                {
+                  "key": "messaging.system",
+                  "value": {
+                    "stringValue": "rabbitmq"
+                  }
+                },
+                {
+                  "key": "messaging.operation.type",
+                  "value": {
+                    "stringValue": "publish"
+                  }
+                },
+                {
+                  "key": "messaging.rabbitmq.destination.routing_key",
+                  "value": {
+                    "stringValue": "notification.classified"
+                  }
+                },
+                {
+                  "key": "bank.operation.outcome",
+                  "value": {
+                    "stringValue": "success"
+                  }
+                },
+                {
+                  "key": "bank.correlation_id",
+                  "value": {
+                    "stringValue": "anomaly-1792737750"
+                  }
+                },
+                {
+                  "key": "messaging.destination.name",
+                  "value": {
+                    "stringValue": "bank.events"
+                  }
+                }
+              ],
+              "status": {}
+            },
+            {
+              "traceId": "0Zp+15BjSde+SMH7Px4PQg==",
+              "spanId": "7KOISJ5jSLw=",
+              "parentSpanId": "bULQO4FCQEc=",
+              "name": "notification.deliver",
+              "kind": "SPAN_KIND_INTERNAL",
+              "startTimeUnixNano": "1792737752657160997",
+              "endTimeUnixNano": "1792737752661514996",
+              "attributes": [
+                {
+                  "key": "bank.operation.outcome",
+                  "value": {
+                    "stringValue": "success"
+                  }
+                },
+                {
+                  "key": "bank.correlation_id",
+                  "value": {
+                    "stringValue": "anomaly-1792737750"
+                  }
+                }
+              ],
+              "status": {}
+            },
+            {
+              "traceId": "0Zp+15BjSde+SMH7Px4PQg==",
+              "spanId": "vVCu4jDpQLM=",
+              "parentSpanId": "bULQO4FCQEc=",
+              "name": "notification.deliver",
+              "kind": "SPAN_KIND_INTERNAL",
+              "startTimeUnixNano": "1792737752698314298",
+              "endTimeUnixNano": "1792737752724965487",
+              "attributes": [
+                {
+                  "key": "bank.operation.outcome",
+                  "value": {
+                    "stringValue": "success"
+                  }
+                },
+                {
+                  "key": "bank.correlation_id",
+                  "value": {
+                    "stringValue": "anomaly-1792737750"
+                  }
+                }
+              ],
+              "status": {}
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
