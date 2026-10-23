@@ -2,6 +2,8 @@
 
 ## Objetivo
 
+Los SLO vigentes están en [slo.md](slo.md). Cada umbral de SLA es más laxo que su SLO, que es lo que corresponde: primero se agota el presupuesto de error y solo después se incumple el acuerdo.
+
 Este documento define los acuerdos de nivel de servicio (SLA) y las consecuencias asociadas al incumplimiento de los SLO de Account Service y Payment Service.
 
 ## 1. Disponibilidad del servicio
@@ -18,7 +20,7 @@ Este documento define los acuerdos de nivel de servicio (SLA) y las consecuencia
 
 ## 4. Consumo de eventos sin pérdida (idempotencia)
 
-**SLA:** Si el porcentaje de eventos procesados exactamente una vez cae por debajo de 99.999% en un mes, se documenta como incidente crítico, dado que compromete la integridad de los saldos.
+**SLA:** Si el porcentaje de eventos procesados exactamente una vez cae por debajo de 99.9% en un mes, se documenta como incidente crítico, dado que compromete la integridad de los saldos.
 
 ## Notas generales
 
