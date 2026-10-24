@@ -1,7 +1,7 @@
-# 20. Referencia API del Gateway
+# Referencia API del Gateway
 
 Base en producción: el frontend en Cloud Run reenvía `/api` al Gateway (mismo origen). El banco pareja entra por `https://35-244-157-47.sslip.io`.  
-Base Docker: `http://localhost:8080`  
+Base Docker Compose: `http://localhost:8080`  
 Base kind: `http://localhost:30080`
 
 Los endpoints protegidos requieren `Authorization: Bearer <JWT>`.
@@ -55,9 +55,9 @@ Request:
 {"sourceAccount":"uuid","targetAccount":"uuid","amount":250}
 ```
 
-Respuesta de aceptación:
+Respuesta de aceptación (el `traceId` permite abrir la Saga completa en Tempo):
 ```json
-{"accepted":true,"correlationId":"uuid","eventId":"uuid","status":"PENDING"}
+{"accepted":true,"correlationId":"uuid","eventId":"uuid","status":"PENDING","traceId":"hex32"}
 ```
 
 ## Historial de transacciones
@@ -97,10 +97,13 @@ El contrato para el banco pareja (`/interbank/v1/*`, autenticado con `X-Api-Key`
 ## Administración
 | Método | Ruta | Acceso |
 |---|---|---|
-| GET | `/api/audit/events` | ADMIN |
+| GET | `/api/audit/events` | ADMIN · auditoría; ver filtros abajo |
 | GET | `/api/payments` | ADMIN/CASHIER |
 | GET | `/api/payments/transaction/:id` | ADMIN/CASHIER |
 | GET, POST, DELETE | `/api/admin/payment-simulation` | ADMIN · inyección de fallos en Payment (`failureRate`, `timeoutRate`, `timeoutMs`, `latencyMs`) |
+
+### Auditoría: filtros y paginación
+`GET /api/audit/events` acepta `correlationId`, `traceId`, `service`, `level` (`INFO`, `WARNING`, `ERROR`), `q` (busca evento, `correlationId` y origen), `page` (desde 0), `size` (1–200) y `paged=true`. Los filtros se combinan en la base. Sin `paged=true` devuelve la lista compatible de los eventos más recientes; con `paged=true` devuelve `{items, page, size, total, totalPages}`. Cada evento incluye `traceId`, `spanId` y `serviceName` (nulos en eventos anteriores a la Fase 3).
 
 ## Health
 - `GET /health`

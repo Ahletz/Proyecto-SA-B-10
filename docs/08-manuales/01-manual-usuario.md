@@ -1,4 +1,4 @@
-# 19. Manual de usuario
+# Manual de usuario
 
 ## URLs
 ### Producción

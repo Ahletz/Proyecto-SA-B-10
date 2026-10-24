@@ -1,4 +1,4 @@
-# 7. Despliegue
+# Despliegue
 
 Dónde corre cada parte de Bank USAC en los dos entornos: desarrollo (Kubernetes efímero con kind) y producción (GCP). El paso de uno a otro es solo por pipeline ([CI/CD](04-ci-cd.md)) y la infraestructura de producción la crea [Terraform](05-terraform-cloud-sql.md). Las únicas excepciones manuales son los Secrets, que se crean fuera del repositorio y se listan abajo.
 

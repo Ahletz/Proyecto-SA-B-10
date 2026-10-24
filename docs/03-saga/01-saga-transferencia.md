@@ -1,4 +1,4 @@
-# 9. Saga de transferencia por coreografía
+# Saga de transferencia por coreografía
 
 ## Premisa
 La transferencia no usa una transacción global ni un orquestador. Cada servicio persiste su estado local y publica el resultado mediante RabbitMQ.

@@ -1,10 +1,10 @@
-# 7. C4 Nivel 1 — Contexto Fase 2
+# C4 Nivel 1 — Contexto
 
 ## Propósito
 
 El diagrama de contexto representa a Bank USAC como el sistema bancario utilizado por clientes, cajeros y administradores. El API Gateway se mantiene como punto único de entrada para las solicitudes de usuario.
 
-La Fase 2 conserva la arquitectura desacoplada de la Fase 1 y agrega capacidades de gestión KYC, tipos de cuenta, historial de transacciones, simulación de pagos externos y clasificación extendida de eventos.
+Bank USAC se integra con un **banco pareja** (BANK13) para enviar y recibir depósitos interbancarios, y se observa con un stack propio de trazas, métricas, logs y alertas. La arquitectura sigue desacoplada: gestión KYC, tipos de cuenta, historial de transacciones, simulación de pagos externos y clasificación de eventos se conservan de las fases anteriores.
 
 ## Actores
 
@@ -26,7 +26,11 @@ El cajero accede a funciones operativas autorizadas, incluyendo operaciones rela
 
 ### Administrador
 
-El administrador dispone de funciones de supervisión, actualización del estado KYC y consulta del historial de auditoría y notificaciones clasificadas.
+El administrador dispone de funciones de supervisión, actualización del estado KYC, consulta del historial de auditoría y notificaciones clasificadas (filtrable por `correlationId` y `traceId`) e inyección de fallos controlados en Payment para las pruebas.
+
+### Operador / equipo SRE
+
+Consulta dashboards, trazas, logs y alertas en el stack de observabilidad (Grafana, Tempo, Loki y Prometheus) y atiende los runbooks de cada alerta.
 
 ## Sistemas externos
 
@@ -40,26 +44,27 @@ Payment Service simula la interacción con un proveedor externo. La respuesta pu
 
 La integración se representa como externa aunque en el entorno académico la respuesta sea simulada.
 
+### Banco pareja (BANK13)
+
+Otro banco que implementa el mismo contrato OpenAPI del curso. Bank USAC le envía depósitos y recibe los suyos por HTTPS, autenticado con `X-Api-Key` y con el header `traceparent`, de modo que cada depósito comparte el mismo `traceId` en ambos bancos. Para pruebas y fallos controlados se usa un banco simulado propio (`interbank-mock`, BANK99), nunca el sistema del otro grupo.
+
 ### Servicio de correo
 
-Notification & Audit utiliza un servicio SMTP para correos de activación y otras notificaciones. En el entorno local se utiliza MailHog.
+Notification & Audit utiliza un servicio SMTP para correos de activación y otras notificaciones. En el entorno de demostración se utiliza MailHog.
 
 ## Límite del sistema
 
-En este nivel Bank USAC se representa como un único sistema. El API Gateway, los cinco microservicios, RabbitMQ y sus bases de datos son detalles internos que se muestran en el C4 Nivel 2.
+En este nivel Bank USAC se representa como un único sistema. El API Gateway, los cinco microservicios, RabbitMQ, sus bases de datos y el stack de observabilidad son detalles internos que se muestran en el [C4 Nivel 2](09-c4-contenedores.md).
 
-El API Gateway continúa siendo el punto único de entrada HTTP. Entre los microservicios de negocio no se utiliza comunicación HTTP directa: la coordinación distribuida se realiza mediante eventos.
+El API Gateway continúa siendo el punto único de entrada HTTP, también para el banco pareja (`/interbank/v1`, solo HTTPS). Entre los microservicios de negocio no se utiliza comunicación HTTP directa: la coordinación distribuida se realiza mediante eventos.
 
 ## Diagrama
 
 ![C4 Nivel 1 — Contexto](../assets/diagramas/c4-context.png)
 
-## Cambios respecto de Fase 1
+## Capacidades incorporadas por fase
 
-La Fase 2 incorpora al contexto:
-
-- estado KYC `PENDING`, `VERIFIED` y `REJECTED`;
-- validación KYC previa a transferencias;
-- simulación de proveedor externo de pagos;
-- notificaciones clasificadas como `INFO`, `WARNING` y `ERROR`;
-- mayor trazabilidad mediante `eventId` y `correlationId`.
+| Fase | Capacidades que aparecen en el contexto |
+|---|---|
+| 2 | Estado KYC `PENDING`, `VERIFIED` y `REJECTED`; validación KYC previa a transferencias; simulación de proveedor externo de pagos; notificaciones `INFO`, `WARNING` y `ERROR`; trazabilidad con `eventId` y `correlationId` |
+| 3 | Depósitos interbancarios con el banco pareja (idempotencia, timeout, reversos y conciliación); observabilidad con OpenTelemetry, SLO y alertas; operador SRE; despliegue en GCP |

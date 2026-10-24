@@ -2,15 +2,19 @@ flowchart LR
     cliente["👤 Cliente\nCuentahabiente"]
     cajero["👤 Cajero"]
     admin["👤 Administrador"]
+    sre["👤 Operador SRE\nDashboards, trazas y alertas"]
 
-    bank["Bank USAC\nSistema Bancario\nGestión de clientes, cuentas,\ntransferencias, pagos y auditoría"]
+    bank["Bank USAC\nSistema Bancario\nClientes, cuentas, transferencias,\ndepósitos interbancarios, pagos,\nauditoría y observabilidad"]
 
     payment["Sistema externo de pagos\nSimulado"]
     smtp["Servicio SMTP\nCorreo / MailHog"]
+    partner["Banco pareja\nBANK13 · contrato OpenAPI del curso\n(simulador propio BANK99 para pruebas)"]
 
-    cliente -->|"Registro, perfil,\ncuentas y transferencias"| bank
+    cliente -->|"Registro, perfil, cuentas,\ntransferencias y depósitos\na otro banco"| bank
     cajero -->|"Operaciones autorizadas\ny pagos"| bank
-    admin -->|"Administración,\nKYC y auditoría"| bank
+    admin -->|"Administración, KYC,\nauditoría e inyección de fallos"| bank
+    sre -->|"Consulta de trazas, métricas,\nlogs y alertas"| bank
 
     bank -.->|"Procesamiento de pago\nsimulado"| payment
     bank -.->|"Notificaciones y\nactivación por correo"| smtp
+    bank <-->|"Depósitos y callbacks\nHTTPS · X-Api-Key · traceparent"| partner

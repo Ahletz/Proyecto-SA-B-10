@@ -1,4 +1,4 @@
-# 7. Contratos de eventos
+# Contratos de eventos
 
 ## Envelope común
 ```json
@@ -29,7 +29,7 @@
 | `customer.updated` | Customer | customerId, updatedFields | Notification/Audit |
 | `customer.kyc.status.changed` | Customer | customerId, estadoAnterior, estadoNuevo (`PENDING`, `VERIFIED`, `REJECTED`) | Transaction, Notification/Audit |
 
-`customer.kyc.status.changed` (Fase 2) se publica solo cuando el estado cambia: repetir el estado actual no emite otro evento. Transaction lo proyecta en su tabla local `customer_kyc_status` y descarta los eventos con `timestamp` anterior al último aplicado.
+`customer.kyc.status.changed` se publica solo cuando el estado cambia: repetir el estado actual no emite otro evento. Transaction lo proyecta en su tabla local `customer_kyc_status` y descarta los eventos con `timestamp` anterior al último aplicado.
 
 ## Eventos de Account/Transaction/Payment
 | Evento | Productor | Consumidores principales | Propósito |
@@ -45,11 +45,12 @@
 | `account.transfer.failed` | Account | Transaction, Notification/Audit | fallo de aplicación si ocurre |
 | `account.funds.released` | Account | Transaction, Notification/Audit | reserva liberada |
 | `account.deactivated` | Account | Notification/Audit | mantenimiento automático |
+| `account.anomaly.detected` | Account | Notification/Audit | actividad inusual en una cuenta; se clasifica `WARNING` y genera una notificación |
 | `transaction.completed` | Transaction | Notification/Audit | estado terminal exitoso |
 | `transaction.failed` | Transaction | Notification/Audit | estado terminal fallido |
 | `transaction.compensated` | Transaction | Notification/Audit | estado terminal compensado |
 | `transaction.status.changed` | Transaction | Notification/Audit | cambio del estado público |
-| `notification.classified` | Notification/Audit | ninguno por ahora | severidad asignada a un evento auditado (Fase 2) |
+| `notification.classified` | Notification/Audit | ninguno por ahora | severidad asignada a un evento auditado |
 
 ### Depósitos interbancarios
 
@@ -72,7 +73,7 @@ Payloads de la Saga:
 | `account.funds.rejected`, `payment.rejected`, `account.transfer.failed` | transactionId, reason |
 | `transaction.completed`, `transaction.failed`, `transaction.compensated` | transactionId, status, reason (solo en fallos) |
 
-Tipos de cuenta (decisión de Fase 2): el contrato usa los mismos valores que la API y la base de datos, `MONETARY` (monetaria/corriente, saldo mínimo 0 por defecto) y `SAVINGS` (ahorro, saldo mínimo 50 por defecto). La propuesta inicial `tipoCuenta`/`saldoMinimo`/`comision` con `AHORRO`/`CORRIENTE` se reemplazó por `type`/`minBalance`/`feeAmount`.
+Tipos de cuenta: el contrato usa los mismos valores que la API y la base de datos, `MONETARY` (monetaria/corriente, saldo mínimo 0 por defecto) y `SAVINGS` (ahorro, saldo mínimo 50 por defecto). La propuesta inicial `tipoCuenta`/`saldoMinimo`/`comision` con `AHORRO`/`CORRIENTE` se reemplazó por `type`/`minBalance`/`feeAmount`.
 
 ### Motivos de fallo (`reason`)
 | Productor | Motivo | Cuándo |
@@ -97,7 +98,7 @@ Se publica junto con `transaction.created`, `transaction.completed`, `transactio
 | `estado` | `PENDING`, `APPROVED` o `FAILED` (ver mapeo en la referencia API del historial) |
 | `fecha` | fecha ISO-8601 del cambio de estado |
 
-### `notification.classified` (Fase 2)
+### `notification.classified`
 | Campo del payload | Descripción |
 |---|---|
 | `eventId` | evento auditado que se clasificó (también va en `causationId`) |

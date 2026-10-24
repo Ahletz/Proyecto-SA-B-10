@@ -1,4 +1,4 @@
-# 3. API Gateway y seguridad
+# API Gateway y seguridad
 
 ## Responsabilidad del Gateway
 El API Gateway NestJS es el único endpoint público del backend. Sus responsabilidades son:

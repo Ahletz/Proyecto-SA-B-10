@@ -23,3 +23,14 @@ Los errores `4xx` (ej. cuenta no encontrada, monto inválido, saldo mínimo no a
 ## 4. Consumo de eventos sin pérdida (idempotencia)
 
 **SLI:** Porcentaje de eventos recibidos que quedan registrados en `processed_events` exactamente una vez, sin duplicados ni pérdidas.
+
+## Cómo se miden en la Fase 3
+
+| SLI | Métrica | Detalle |
+|---|---|---|
+| 1. Disponibilidad | `http_server_request_duration_seconds` | 1 − (respuestas `5xx` / total) por servicio; los `4xx` no cuentan |
+| 2. Éxito de operaciones | `bank_operations_total{operation,outcome}` | solo `outcome="technical_error"` cuenta como fallo; `business_rejection` es éxito del sistema |
+| 3. Latencia | `bank_operation_duration_seconds` (histograma) | p50, p95 y p99; el bucket de 5 s es el del SLO |
+| 4. Idempotencia | `bank_events_duplicate_total` frente a `bank_events_processed_total` | eventos descartados por `processed_events` frente a los consumidos |
+
+Los nombres, etiquetas y buckets están en el [catálogo de métricas](../observabilidad/catalogo-metricas.md) y los objetivos vigentes en [slo.md](slo.md).

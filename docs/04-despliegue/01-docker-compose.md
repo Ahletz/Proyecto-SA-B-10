@@ -1,4 +1,4 @@
-# 10. Despliegue local con Docker Compose
+# Despliegue local con Docker Compose
 
 ## Comando
 ```bash

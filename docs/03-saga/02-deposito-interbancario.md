@@ -1,4 +1,4 @@
-# 10. Saga del depósito interbancario (Fase 3)
+# Saga del depósito interbancario
 
 El depósito a otro banco sigue el mismo estilo que la [transferencia interna](01-saga-transferencia.md): coreografía por RabbitMQ, sin transacción global. Lo nuevo es el **banco pareja**, que se alcanza por HTTP según el contrato OpenAPI del curso (`docs/interbank/openapi.yaml`, sin modificar). Payment es la única frontera con el otro banco. El diseño completo de eventos e interfaces está en [diseño interbancario](../interbank/diseno-interbancario.md).
 

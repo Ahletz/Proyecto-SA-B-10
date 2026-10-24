@@ -34,9 +34,7 @@ Alertas de consumo del presupuesto: `SloBurnRateFast` (burn rate > 14.4 en 1 h y
 
 **SLO original (Fase 1/2):** 95% de los eventos procesados en menos de 2 segundos. En Fase 3 se mide y alerta con p95 < 5 s (ver tabla inicial).
 
-![Latencia de procesamiento de eventos](grafica1.png)
-
-*Figura 1. Ejemplo ilustrativo de latencia de procesamiento de eventos de Account Service a lo largo de 7 días, comparado contra el SLO de 2 segundos. Los valores son simulados para fines de documentación; se recomienda reemplazarlos con datos reales una vez el sistema cuente con monitoreo en producción.*
+Evidencia real de la latencia: el panel de p50/p95/p99 del dashboard *Bank USAC - Transferencias y API Gateway* y el [postmortem del escenario 1](../postmortems/2026-10-21-escenario1-payment-degradado.md), donde el p95 de la Saga llegó a 6,34 s con el procesador externo degradado.
 
 ## 4. Consumo de eventos sin pérdida (idempotencia)
 
@@ -44,6 +42,6 @@ Alertas de consumo del presupuesto: `SloBurnRateFast` (burn rate > 14.4 en 1 h y
 
 > **Nota de revisión (Fase 2):** en la Fase 1 este SLO se definió como 100%. Se corrigió porque un objetivo de 100% no deja margen de error estadístico (*error budget* de cero) y es considerado un antipatrón en la práctica de SRE — un solo evento duplicado en todo un periodo de medición dejaría el objetivo permanentemente incumplido, sin poder demostrarse de forma realista. El nuevo valor sigue siendo el más estricto de los cuatro SLO, dado el impacto directo en la integridad de los saldos.
 
-![Disponibilidad del servicio](grafica2.png)
+## Medición real del presupuesto de error
 
-*Figura 2. Ejemplo ilustrativo del comportamiento de disponibilidad de Account Service a lo largo de 7 días, comparado contra el SLO de 99%. Los valores son simulados para fines de documentación; se recomienda reemplazarlos con datos reales una vez el sistema cuente con monitoreo en producción.*
+El dashboard *Bank USAC - SLO Account y Payment* muestra el SLI de 30 días, el presupuesto de error restante y el burn rate a partir de `bank_operations_total`. Ejemplo medido: en el [escenario 1](../postmortems/2026-10-21-escenario1-payment-degradado.md), 983 operaciones con `technical_error` consumieron cerca del 8,4 % del presupuesto mensual (con el supuesto de tráfico que explica el postmortem) y `SloBurnRateFast` pasó a Firing 3 min 22 s después de inyectar la falla.
