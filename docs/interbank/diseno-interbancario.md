@@ -70,7 +70,7 @@ Account **nunca acredita** un mensaje vencido (`EXPIRED`, aunque llegue por rein
 
 Los eventos de Payment salen con `eventId` determinista (id + estado) desde una tabla outbox: si RabbitMQ estaba caído se publican después, y si se publican dos veces el consumidor los descarta por idempotencia.
 
-## 5. Estados de la Saga para Transaction (Nufio)
+## 5. Estados de la Saga en Transaction
 
 | Estado en la Saga | Cuándo |
 |---|---|
@@ -83,12 +83,12 @@ Los eventos de Payment salen con `eventId` determinista (id + estado) desde una 
 
 Pueden llegar eventos fuera de orden (por ejemplo `timeout` y luego `accepted`): un estado final (`ACCEPTED`, `REJECTED`, `REVERSED`) no debe sobrescribirse con `SENT` ni `TIMEOUT`.
 
-## 6. Qué configura Nufio en el Gateway
+## 6. Qué hace el Gateway
 
-- Enrutar `/interbank/v1/*` → `payment-service` (mismo path). Solo HTTPS. `GET /interbank/v1/health` sin autenticación.
-- Validar `X-Api-Key` (una clave por banco, en Secret de Kubernetes), exigir `traceparent` (400 si falta) y reenviarlo.
-- Reenviar a Payment `X-Caller-Bank-Code` según la clave; quitar cualquier `X-Caller-Bank-Code` que venga del cliente. Reenviar también `Idempotency-Key`.
-- **No** exponer `/internal/*` (hay endpoints internos en Account y Payment).
+- Enruta `/interbank/v1/*` → `payment-service` (mismo path), solo por HTTPS. `GET /interbank/v1/health` no requiere autenticación.
+- Valida `X-Api-Key` (una clave por banco, en un Secret de Kubernetes), exige `traceparent` (`400` si falta) y lo reenvía.
+- Reenvía a Payment `X-Caller-Bank-Code` según la clave y descarta cualquier `X-Caller-Bank-Code` que venga del cliente. Reenvía también `Idempotency-Key`.
+- **No** expone `/internal/*` (hay endpoints internos en Account y Payment).
 
 ## 7. Configuración (variables de entorno / Secrets)
 

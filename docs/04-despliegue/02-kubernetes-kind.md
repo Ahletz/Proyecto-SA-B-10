@@ -1,4 +1,4 @@
-# 11. Despliegue Kubernetes local con kind
+# Despliegue Kubernetes local con kind
 
 ## Comando
 ```bash
@@ -12,14 +12,14 @@ El script:
 4. construye las imágenes locales;
 5. las carga en kind;
 6. sustituye `__HOST_GATEWAY__` en los manifests de los cinco servicios;
-7. aplica namespace, secretos, RabbitMQ, MailHog, servicios, Gateway, Frontend y NetworkPolicy;
+7. aplica namespace, secretos, ConfigMap `bank-app-info` (versión y ambiente que leen los logs y OpenTelemetry), RabbitMQ y MailHog, servicios, Gateway, Frontend y NetworkPolicy;
 8. espera los rollouts.
 
 ## Servicios Kubernetes
 - Frontend: NodePort `30000`;
 - Gateway: NodePort `30080`;
 - Customer, Account, Transaction, Payment y Notification/Audit: `ClusterIP`;
-- RabbitMQ y MailHog: internos al cluster;
+- RabbitMQ (incluye el puerto de métricas `15692`) y MailHog: internos al cluster;
 - PostgreSQL: fuera del cluster, en Docker host.
 
 ## Verificación
@@ -34,3 +34,6 @@ Todos los pods de aplicación deben aparecer `1/1 Running`.
 ![Deployment](../assets/diagramas/uml-deployment.png)
 
 ![Startup](../assets/diagramas/startup-flow.png)
+
+## Alcance del script y del pipeline
+`start-k8s.sh` levanta el sistema base para la demostración local. No despliega el simulador `interbank-mock` ni el stack de observabilidad: el overlay `k8s/overlays/dev` (que usa `cd-dev.yml` en un kind efímero) sí incluye `interbank-mock`, y el stack de `observability/` solo corre en GKE ([Despliegue](07-despliegue-fase3.md)).

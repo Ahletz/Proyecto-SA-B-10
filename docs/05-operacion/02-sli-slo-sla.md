@@ -1,4 +1,4 @@
-# 14. SLI, SLO y SLA
+# SLI, SLO y SLA
 
 Estos valores son objetivos académicos propuestos para evaluar el comportamiento del sistema local (smoke y demostración); no representan un contrato de producción. Los SLO que se miden y alertan en producción, con su error budget, están en [`docs/sre/slo.md`](../sre/slo.md). Son indicadores distintos: aquí la disponibilidad se mide con sondas al Gateway y allá con `bank_operations_total`, por eso los porcentajes no son comparables.
 

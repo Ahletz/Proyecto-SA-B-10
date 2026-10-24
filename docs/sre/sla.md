@@ -24,7 +24,7 @@ Este documento define los acuerdos de nivel de servicio (SLA) y las consecuencia
 
 ## Notas generales
 
-- Las métricas de disponibilidad y latencia se pueden obtener a partir de los logs de Spring Boot/NestJS y las consultas a la tabla `processed_events`.
+- Las métricas de disponibilidad, éxito, latencia e idempotencia salen de Prometheus (ver [SLI](sli.md#cómo-se-miden-en-la-fase-3)); la tabla `processed_events` sirve para verificar casos puntuales.
 - El SLO de idempotencia (99.95%) es el más estricto de los cuatro porque un evento duplicado en un sistema bancario puede causar una transferencia o un pago duplicado — pero se define con margen de error medible, no como un absoluto del 100%, siguiendo práctica estándar de SRE.
 - Los rechazos de negocio (fondos insuficientes, saldo mínimo no alcanzado, fallo simulado del procesador de pago externo) no cuentan contra estos SLO/SLA, ya que representan comportamiento correcto del sistema, no una falla técnica.
 - Estos indicadores aplican a Account Service y Payment Service; los demás microservicios definen los suyos según su propio dominio.

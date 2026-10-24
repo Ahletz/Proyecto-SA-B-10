@@ -1,4 +1,4 @@
-# 2. Modelo de dominio y bounded contexts
+# Modelo de dominio y bounded contexts
 
 Documento único del modelo de dominio: entidades, estados y reglas de cada bounded context, y el diagrama entidad-relación por base de datos.
 
@@ -15,7 +15,7 @@ Reglas implementadas:
 - estado inicial `PENDING_ACTIVATION` y posterior `ACTIVE`;
 - identidad queda `VALIDATED` cuando el registro cumple las validaciones.
 
-**KYC (Fase 2):** `kycStatus` inicia en `PENDING` y un `ADMIN` lo cambia a `VERIFIED` o `REJECTED` (`PATCH /api/customers/{customerId}/kyc`). Cada cambio real publica `customer.kyc.status.changed`; repetir el mismo estado no publica un evento duplicado.
+**KYC:** `kycStatus` inicia en `PENDING` y un `ADMIN` lo cambia a `VERIFIED` o `REJECTED` (`PATCH /api/customers/{customerId}/kyc`). Cada cambio real publica `customer.kyc.status.changed`; repetir el mismo estado no publica un evento duplicado.
 
 ## Account Context
 **Entidades:** `AccountEntity`, `ReservationEntity`, `ProcessedEventEntity`.
@@ -68,7 +68,7 @@ Reglas de negocio:
 
 Cada evento auditado conserva `eventId`, `eventType`, versión, `correlationId`, payload, timestamp del evento, timestamp de procesamiento, severidad y origen. El mismo contexto envía el correo de activación y la notificación de transferencia recibida.
 
-**Clasificación (Fase 2):** cada evento recibe severidad `INFO`, `WARNING` o `ERROR` y un origen (prefijo del tipo de evento, p. ej. `payment`):
+**Clasificación:** cada evento recibe severidad `INFO`, `WARNING` o `ERROR` y un origen (prefijo del tipo de evento, p. ej. `payment`):
 
 | Evento | Severidad |
 |---|---|
@@ -78,6 +78,7 @@ Cada evento auditado conserva `eventId`, `eventType`, versión, `correlationId`,
 | `customer.kyc.status.changed` a `REJECTED` | `WARNING` |
 | `account.funds.rejected`, `transaction.compensated` | `WARNING` |
 | Tipos terminados en `.failed` o `.error` | `ERROR` |
+| `account.anomaly.detected` | `WARNING` (genera además una notificación al cliente) |
 | Resto (registro, activación, cuenta creada, transferencia solicitada, etc.) | `INFO` |
 
 ## Límites DDD
@@ -91,14 +92,14 @@ Cada microservicio posee su propia base de datos PostgreSQL, sin claves foránea
 
 | Base | Servicio | Tablas |
 | ---- | -------- | ------ |
-| `bank_customer` | Customer | `customers` (incluye `kyc_status`) |
+| `bank_customer` | Customer | `customers` (incluye `kyc_status` y el correlationId y contexto de traza del ciclo de vida) |
 | `bank_account` | Account | `accounts` (tipo, saldo mínimo, comisión), `transfer_reservations`, `interbank_operations` (reserva, débito y crédito de cada depósito interbancario), `processed_events` |
 | `bank_transaction` | Transaction | `transactions` (incluye `failure_reason`, `destination_bank_code` e `interbank_state`), `customer_kyc_status`, `processed_events` |
 | `bank_payment` | Payment | `payments`, `interbank_transfers` (depósitos enviados y recibidos, con su estado frente al banco pareja), `interbank_reversals`, `processed_events` |
-| `bank_notification` | Notification & Audit | `processed_events` (auditoría con `payload` y clasificación `severity`/`origin`) |
+| `bank_notification` | Notification & Audit | `processed_events` (auditoría con `payload` saneado, clasificación `severity`/`origin`, `trace_id`, `span_id` y `service_name`), `notification_outbox` (entrega de correos y eventos con reintentos) y `notification_customer_contacts` (contactos proyectados por eventos) |
 
 Cada servicio que consume eventos tiene su propia tabla `processed_events` para la idempotencia por `eventId`; no es una tabla compartida. Las únicas relaciones dibujadas son internas de una base y por id, sin FK: `accounts` → `transfer_reservations` e `interbank_operations` en `bank_account`, e `interbank_transfers` → `interbank_reversals` en `bank_payment`.
 
 ![Diagrama ER por base de datos](../assets/diagramas/er-databases.png)
 
-Fuente Mermaid: [`c4-src/er-databases.mmd`](c4-src/er-databases.mmd). Las tablas base las crean los ORM (TypeORM en los servicios NestJS, JPA con `ddl-auto: update` en Customer y Notification); los cambios de Fase 2 están en `infrastructure/databases/<servicio>/*.sql`.
+Fuente Mermaid: [`c4-src/er-databases.mmd`](c4-src/er-databases.mmd). Las tablas base las crean los ORM (TypeORM en los servicios NestJS, JPA con `ddl-auto: update` en Customer y Notification); las migraciones aditivas están en `infrastructure/databases/<servicio>/*.sql`.

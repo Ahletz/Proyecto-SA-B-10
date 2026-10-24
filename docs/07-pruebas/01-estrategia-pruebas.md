@@ -1,4 +1,4 @@
-# 16. Estrategia de pruebas
+# Estrategia de pruebas
 
 ## Validación estática/build
 El CI de cada rama `feature/**` compila los servicios y ejecuta sus pruebas unitarias; cualquier fallo detiene el pipeline (detalle en [CI/CD](../04-despliegue/04-ci-cd.md)).

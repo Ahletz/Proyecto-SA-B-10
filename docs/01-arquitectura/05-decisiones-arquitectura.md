@@ -1,4 +1,4 @@
-# 5. Decisiones arquitectónicas y trade-offs
+# Decisiones arquitectónicas y trade-offs
 
 ## ADR-001 - Cinco bounded contexts independientes
 **Decisión:** Customer, Account, Transaction, Payment y Notification/Audit son microservicios separados.
@@ -88,3 +88,18 @@ El correo se envía por SMTP real hacia MailHog en desarrollo. Esto permite demo
 **Ventajas:** Cloud Run es un servicio de despliegue rápido: HTTPS y dominio propios, escala a cero y cada despliegue crea una revisión nueva que recibe el tráfico cuando está lista (sin downtime y con rollback por revisión). El proxy deja la API en el mismo origen, así el navegador no bloquea llamadas HTTP desde una página HTTPS (contenido mixto) y no depende de CORS. La imagen no lleva compilada la IP del Gateway: el pipeline la lee del LoadBalancer en cada despliegue, así que la misma imagen probada en la release llega a producción.
 
 **Coste / alternativas:** una VM de Compute Engine con el contenedor evita Artifact Registry, pero hay que mantener el sistema operativo, abrir SSH al pipeline y resolver HTTPS a mano. Cloud Run no descarga de GHCR, por eso la imagen se copia a Artifact Registry (mismo tag, sin recompilar). El tramo de Cloud Run al Gateway es HTTP por la IP pública del LoadBalancer; para un entorno real se usaría un Ingress con certificado, como el que ya expone `/interbank/v1` al banco pareja (`gateway-ingress.yaml`, `ManagedCertificate`).
+
+## ADR-016 - Stack de observabilidad: OpenTelemetry, Prometheus, Tempo, Loki y Grafana
+**Decisión:** los servicios emiten trazas y métricas con el SDK de OpenTelemetry por OTLP a un único OTel Collector; escriben logs JSON por stdout, que un DaemonSet (`otel-logs-agent`) lleva a Loki. Prometheus guarda las métricas (y evalúa SLO y alertas), Tempo las trazas, Loki los logs y Grafana los une con dashboards como código. Todo corre en el namespace `observability` del mismo cluster y se despliega con `kubectl apply -k observability` desde `deploy-observability.yml` ([convenciones](../observabilidad/convenciones.md)).
+
+**Ventajas:** un solo protocolo y un solo punto de entrada (el Collector) desacoplan el código de los backends. Los tres almacenes comparten identificadores: de una traza en Tempo se abre el log de Loki por `traceId`, y de una alerta de Prometheus se llega al dashboard y al runbook. No hay licencias ni servicios de pago, y dashboards, reglas y runbooks viven en el repositorio.
+
+**Retención y costo:** cada almacén tiene un volumen de 10 Gi.
+- Prometheus conserva 30 días (con tope de 8 GB), lo que exige la ventana del SLO de 30 días.
+- Tempo y Loki conservan 72 horas: el volumen por petición es mucho mayor, y se asume que 72 h bastan para investigar un incidente y reunir la evidencia de su postmortem.
+- Muestreo `parentbased_always_on`: el sistema es pequeño y los postmortems necesitan la traza completa; en un sistema grande se reemplazaría por muestreo.
+- Tempo tiene 1536 Mi de memoria porque con 700 Mi lo terminaba el OOM durante la prueba de carga.
+
+**Cardinalidad:** las etiquetas de métricas son solo `operation`, `outcome`, `event_type`, `role` y `state` (más `service_name` y `deployment_environment`). Los identificadores (`accountId`, `transactionId`, `correlationId`, `traceId`) van en trazas y logs, nunca en etiquetas ([catálogo](../observabilidad/catalogo-metricas.md)). Cada bucket de un histograma es una serie, así que los buckets se limitan a los umbrales del SLO.
+
+**Coste / alternativas:** ELK (Elasticsearch) indexa el contenido completo de cada log y exige más memoria y disco que Loki, que solo indexa etiquetas; en un cluster de 2 a 4 nodos `e2-standard-2` que también aloja la aplicación habría competido por los mismos recursos. Un servicio administrado (Cloud Logging, Cloud Trace, Managed Prometheus) cobra por volumen y ata las consultas a un proveedor; el punto de entrada OTLP permitiría migrar a uno cambiando solo la configuración del Collector. A cambio, el stack propio hay que operarlo (disco, memoria, versiones) y comparte cluster con la aplicación, de modo que un pico de la carga también presiona a la observabilidad.

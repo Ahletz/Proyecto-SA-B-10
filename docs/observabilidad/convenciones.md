@@ -1,6 +1,6 @@
 # Convenciones de observabilidad — Bank USAC (Fase 3)
 
-Versión 1, propuesta por Ale (Integrante 1). Destino en el repo: `docs/observabilidad/convenciones.md`. Si algo cambia, se anota aquí y se avisa a los demás antes de tocar código dependiente.
+Acuerdos de nombres, etiquetas y formatos que cumplen los cinco microservicios y el Gateway. Si algo cambia, se anota aquí antes de tocar el código que depende de ello.
 
 Aplica a los 5 microservicios y al API Gateway. Nombres de servicio (`serviceName`, `OTEL_SERVICE_NAME`): `customer-service`, `account-service`, `transaction-service`, `payment-service`, `notification-audit-service`, `api-gateway`.
 
@@ -18,11 +18,11 @@ Aplica a los 5 microservicios y al API Gateway. Nombres de servicio (`serviceNam
 | `OTEL_SDK_DISABLED` | `true` solo en `docker-compose` local sin Collector; nunca en K8s |
 | `OTEL_SEMCONV_STABILITY_OPT_IN` | `http` (solo Node: las métricas HTTP salen como `http_server_request_duration_seconds` con la etiqueta `http_response_status_code`) |
 
-El namespace `observability` y el nombre del Service `otel-collector` los crea el stack que despliega Ale. Los servicios no cambian estos nombres.
+El namespace `observability` y el Service `otel-collector` los crea el stack de `observability/`. Los servicios no cambian estos nombres.
 
 ## 2. Logs: JSON por stdout
 
-Los servicios escriben **solo a stdout, una línea JSON por evento**. Nunca a archivos ni por el broker; el agente de Alex los recoge desde los pods hacia Loki.
+Los servicios escriben **solo a stdout, una línea JSON por evento**. Nunca a archivos ni por el broker; el agente `otel-logs-agent` los recoge desde los pods hacia Loki.
 
 | Campo | Obligatorio | Descripción |
 |---|---|---|
@@ -31,7 +31,7 @@ Los servicios escriben **solo a stdout, una línea JSON por evento**. Nunca a ar
 | `serviceName` | sí | nombre de la lista de arriba |
 | `environment` | sí | `dev` o `prod` |
 | `version` | sí | tag de la imagen |
-| `correlationId` | sí | el que ya maneja el middleware del Gateway (Fase 2); no se cambia el nombre ni el formato |
+| `correlationId` | sí | el que maneja el middleware del Gateway; no se cambia el nombre ni el formato |
 | `traceId` | sí | `trace_id` del span activo (32 hex); vacío si no hay span |
 | `spanId` | sí | `span_id` del span activo (16 hex); vacío si no hay span |
 | `message` | sí | texto corto |
@@ -98,4 +98,4 @@ Para agregar un dashboard o un archivo de alertas, además de crear el archivo h
 ## 6. Notas por tecnología
 
 - **Node/NestJS** (Account, Payment, Transaction, Gateway): SDK de OpenTelemetry cargado antes que el resto de la app (ejemplo en `docs/observabilidad/ejemplos/tracing.ts`), y logger JSON que agregue `traceId` y `spanId` al log. Si el servicio publica con `amqplib`, la instrumentación automática ya inyecta y extrae `traceparent` en los mensajes; se verifica en Tempo que el consumidor aparezca como hijo del publicador.
-- **Java/Spring Boot** (Customer, Notification): agente de OpenTelemetry para Java y encoder JSON de logback con `traceId`/`spanId` desde MDC. El agente solo no basta: la rúbrica penaliza instrumentación superficial, así que hay que agregar spans y métricas manuales en la lógica de negocio.
+- **Java/Spring Boot** (Customer, Notification): SDK de OpenTelemetry dentro de la aplicación (sin agente externo), con un filtro HTTP y el publicador AMQP que propagan `traceparent`, y logs JSON con `traceId`/`spanId` desde MDC. La lógica de negocio agrega sus propios spans y métricas; no basta la instrumentación automática.

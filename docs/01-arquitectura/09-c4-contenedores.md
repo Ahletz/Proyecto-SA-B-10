@@ -1,4 +1,4 @@
-# 9. C4 Nivel 2 — Contenedores
+# C4 Nivel 2 — Contenedores
 
 ## Propósito
 

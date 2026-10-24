@@ -1,6 +1,6 @@
-# 6. Catálogo de diagramas
+# Catálogo de diagramas
 
-Todos los PNG están en `docs/assets/diagramas/`. Los editables correspondientes están fuera de `docs`, en la carpeta `drawio/` del paquete de entrega.
+Todos los PNG están en `docs/assets/diagramas/`. Las fuentes editables son los archivos Mermaid de `docs/01-arquitectura/c4-src/` (y, para algunos diagramas de fases anteriores, los `.drawio` del paquete de entrega).
 
 | Diagrama | Evidencia |
 |---|---|
@@ -25,7 +25,7 @@ Todos los PNG están en `docs/assets/diagramas/`. Los editables correspondientes
 | Retry/DLQ | `retry-dlq-flow.png` |
 | Observabilidad | `observability-correlation.png` |
 | Despliegue en producción (GKE `prod` y `observability`, Cloud Run, Cloud SQL) | `deployment-fase3.png` (fuente: [`c4-src/deployment-fase3.mmd`](c4-src/deployment-fase3.mmd)) |
-| UML Deployment (Fase 1, kind local) | `uml-deployment.png` |
+| UML Deployment (kind local) | `uml-deployment.png` |
 | UML casos de uso | `uml-use-cases.png` |
 | Arranque | `startup-flow.png` |
 | Flujo de demostración | `demo-flow.png` |
@@ -40,14 +40,14 @@ Todos los PNG están en `docs/assets/diagramas/`. Los editables correspondientes
 
 ![Despliegue](../assets/diagramas/deployment-fase3.png)
 
-## Actualización Fase 2 — Integrante 1
+## Documentación detallada de los diagramas
 
-La documentación detallada de los diagramas actualizados se encuentra en:
+### Contexto, Customer y Notification & Audit
 
-- [C4 Nivel 1 — Contexto Fase 2](07-c4-contexto-fase2.md)
+- [C4 Nivel 1 — Contexto](07-c4-contexto-fase2.md)
 - [C4 Nivel 3 — Customer y Notification & Audit](08-c4-componentes-integrante1-fase2.md)
 
-## Diagramas de Integrante 3
+### Contenedores, despliegue, Transaction, Account y Payment, ER y secuencias
 
 - [C4 Nivel 2 — Contenedores](09-c4-contenedores.md) (`c4-container-fase3.png`): aplicación, stack de observabilidad, Ingress HTTPS, banco pareja BANK13, simulador BANK99 y agente de logs.
 - [Despliegue](../04-despliegue/07-despliegue-fase3.md) (`deployment-fase3.png`): namespaces `prod` y `observability`, Cloud Run, Cloud SQL, IP estática y Secrets.

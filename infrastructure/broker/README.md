@@ -2,12 +2,9 @@
 
 ## Estado
 
-El broker queda definido de forma reproducible para el proyecto, con:
-- exchange principal `bank.events`
-- queue del consumidor `svc.notification.dev.customer`
-- DLQ `svc.notification.dev.customer.dlq`
-- binding `customer.*`
-- credenciales inicializadas por `.env`
+RabbitMQ corre como el servicio `rabbitmq` de `infrastructure/docker-compose.yml` (imagen `rabbitmq:4.3.6-management`, credenciales por `.env`). **Cada servicio declara al arrancar sus propias colas y bindings** (`bank.events`, `.retry` y `.dlx`); la topología real está en [Topología RabbitMQ](../../docs/02-eventos/02-topologia-rabbitmq.md). En Kubernetes lo despliega `k8s/broker/rabbitmq.yaml`, con el puerto de métricas `15692`.
+
+`rabbitmq/definitions.json` es un resto de la Fase 1 (cola `svc.notification.dev.audit`): Compose no lo carga y ningún servicio lo usa.
 
 ## Preparación
 
@@ -36,14 +33,10 @@ Usuario/contraseña por defecto:
 rabbit_user / rabbit_password
 ```
 
-## Definiciones cargadas
-
-El archivo [infrastructure/broker/rabbitmq/definitions.json](infrastructure/broker/rabbitmq/definitions.json) monta el estado inicial del broker al arrancar el contenedor.
-
 ## Reglas de uso
 
 - Exchange principal: `bank.events` (topic)
-- Routing key: `customer.*` para eventos de Customer y `entity.action` cuando aplique
+- Routing key = `eventType`, con la forma `dominio.accion` (por ejemplo `customer.registered` o `account.interbank.funds.reserved`)
 - Todas las queues deben ser durables
 - Todo consumidor debe manejar idempotencia con `eventId`
 - Los fallos permanentes deben ir a la DLQ
