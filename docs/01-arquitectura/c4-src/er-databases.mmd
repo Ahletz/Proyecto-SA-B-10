@@ -150,4 +150,23 @@ erDiagram
         varchar severity "INFO · WARNING · ERROR"
         varchar origin
         text classification_message
+        varchar trace_id "nulo en eventos históricos"
+        varchar span_id
+        varchar service_name
+    }
+    NOTIFICATION_OUTBOX["bank_notification · notification_outbox"] {
+        varchar id PK "estable por evento y tipo"
+        varchar kind "correo, evento clasificado, alerta"
+        text body
+        varchar status "PENDING · FAILED ..."
+        int attempts "FAILED tras 10"
+        timestamptz created_at
+        timestamptz next_attempt_at
+        varchar correlation_id
+        varchar traceparent
+    }
+    NOTIFICATION_CUSTOMER_CONTACTS["bank_notification · notification_customer_contacts"] {
+        varchar customer_id PK "proyección de eventos de Customer"
+        varchar email
+        timestamptz updated_at
     }

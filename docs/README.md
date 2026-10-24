@@ -37,43 +37,45 @@ Sobre la base de la Fase 1, la solución incluye:
 
 ## Índice para calificación
 
-1. [Arquitectura y diseño](01-arquitectura/01-vision-general.md)
+### Arquitectura y diseño
+1. [Visión general](01-arquitectura/01-vision-general.md)
 2. [Modelo de dominio y bounded contexts](01-arquitectura/02-modelo-dominio.md)
 3. [API Gateway y seguridad](01-arquitectura/03-api-gateway-seguridad.md)
 4. [Persistencia y data ownership](01-arquitectura/04-persistencia-data-ownership.md)
-5. [Decisiones arquitectónicas](01-arquitectura/05-decisiones-arquitectura.md)
+5. [Decisiones arquitectónicas](01-arquitectura/05-decisiones-arquitectura.md) (ADR-001 a ADR-016)
 6. [Catálogo de diagramas](01-arquitectura/06-catalogo-diagramas.md)
-7. [C4 Nivel 1 — Contexto Fase 2](01-arquitectura/07-c4-contexto-fase2.md)
-8. [C4 Nivel 3 — Customer y Notification & Audit](01-arquitectura/08-c4-componentes-integrante1-fase2.md)
-9. [C4 Nivel 2 — Contenedores](01-arquitectura/09-c4-contenedores.md)
-10. [Contratos de eventos](02-eventos/01-contratos-eventos.md)
-11. [Topología RabbitMQ](02-eventos/02-topologia-rabbitmq.md)
-12. [Saga de transferencia](03-saga/01-saga-transferencia.md)
-13. [Docker Compose](04-despliegue/01-docker-compose.md)
-14. [Kubernetes kind](04-despliegue/02-kubernetes-kind.md)
-15. [NetworkPolicy](04-despliegue/03-network-policy.md)
+7. [C4 Nivel 1 — Contexto](01-arquitectura/07-c4-contexto-fase2.md)
+8. [C4 Nivel 2 — Contenedores](01-arquitectura/09-c4-contenedores.md)
+9. [C4 Nivel 3 — Customer y Notification & Audit](01-arquitectura/08-c4-componentes-integrante1-fase2.md); los de Account, Payment y Transaction están en el [catálogo de diagramas](01-arquitectura/06-catalogo-diagramas.md)
+10. [Casos de uso](uml/use-cases.md)
+
+### Eventos y Saga
+11. [Contratos de eventos](02-eventos/01-contratos-eventos.md)
+12. [Topología RabbitMQ](02-eventos/02-topologia-rabbitmq.md)
+13. [Saga de transferencia](03-saga/01-saga-transferencia.md)
+14. [Saga del depósito interbancario](03-saga/02-deposito-interbancario.md), [diseño interbancario](interbank/diseno-interbancario.md) y [acuerdo de integración con BANK13](interbank/acuerdo-integracion.md)
+
+### Despliegue
+15. [Despliegue (dev y producción)](04-despliegue/07-despliegue-fase3.md)
 16. [CI/CD](04-despliegue/04-ci-cd.md) y [Terraform](04-despliegue/05-terraform-cloud-sql.md)
-17. [Prueba de carga del HPA](04-despliegue/06-prueba-hpa.md)
-18. [Resiliencia y observabilidad](05-operacion/01-resiliencia-observabilidad.md)
-19. [SLI, SLO y SLA](05-operacion/02-sli-slo-sla.md)
-20. [Casos de uso](uml/use-cases.md)
-21. [Pruebas](07-pruebas/01-estrategia-pruebas.md)
-22. [Guía de demostración](07-pruebas/02-guia-demostracion.md)
-23. [Checklist de calificación](07-pruebas/03-checklist-calificacion.md)
-24. [Manual de usuario](08-manuales/01-manual-usuario.md)
-25. [Referencia API](08-manuales/02-referencia-api.md)
-26. [Matriz requisito-evidencia](09-calificacion/01-matriz-requisito-evidencia.md)
-27. [Guion de sustentación](09-calificacion/02-guion-sustentacion.md)
+17. [Docker Compose](04-despliegue/01-docker-compose.md), [Kubernetes kind](04-despliegue/02-kubernetes-kind.md) y [NetworkPolicy](04-despliegue/03-network-policy.md)
+18. [Prueba de carga del HPA](04-despliegue/06-prueba-hpa.md)
 
-### Fase 3
+### Observabilidad y operación
+19. [Resiliencia y observabilidad](05-operacion/01-resiliencia-observabilidad.md)
+20. [Convenciones de observabilidad](observabilidad/convenciones.md), [catálogo de métricas](observabilidad/catalogo-metricas.md) y [contratos de Account y Payment](observabilidad/contratos-account-payment.md)
+21. [SLI](sre/sli.md), [SLO](sre/slo.md) y [SLA](sre/sla.md) vigentes; [objetivos de demostración local](05-operacion/02-sli-slo-sla.md)
+22. Runbooks por alerta: [`observability/runbooks/`](../observability/runbooks/)
+23. [Pruebas de carga](pruebas/carga.md), [escenarios de fallo](pruebas/escenarios-de-fallo.md) y [guía de operación](pruebas/guia-operacion-pruebas.md)
+24. [Postmortems](postmortems/)
 
-28. [Despliegue (dev y producción)](04-despliegue/07-despliegue-fase3.md)
-29. [Saga del depósito interbancario](03-saga/02-deposito-interbancario.md)
-30. [Diseño interbancario](interbank/diseno-interbancario.md) y [acuerdo de integración con BANK13](interbank/acuerdo-integracion.md)
-31. [Convenciones de observabilidad](observabilidad/convenciones.md) y [catálogo de métricas](observabilidad/catalogo-metricas.md)
-32. [Pruebas de carga](pruebas/carga.md) y [escenarios de fallo](pruebas/escenarios-de-fallo.md)
-33. [Postmortems](postmortems/)
-34. Runbooks por alerta: [`observability/runbooks/`](../observability/runbooks/)
+### Pruebas, manuales y calificación
+25. [Estrategia de pruebas](07-pruebas/01-estrategia-pruebas.md) y [evidencia de pruebas unitarias](testing/README.md)
+26. [Guía de demostración](07-pruebas/02-guia-demostracion.md)
+27. [Checklist de calificación](07-pruebas/03-checklist-calificacion.md)
+28. [Manual de usuario](08-manuales/01-manual-usuario.md) y [referencia API](08-manuales/02-referencia-api.md)
+29. [Matriz requisito-evidencia](09-calificacion/01-matriz-requisito-evidencia.md)
+30. [Guion de sustentación](09-calificacion/02-guion-sustentacion.md)
 
 ## Diagramas principales
 
@@ -85,10 +87,9 @@ Sobre la base de la Fase 1, la solución incluye:
 
 ![Saga](assets/diagramas/saga-success.png)
 
-## Fase 3 — Customer y Notification & Audit
+## Customer y Notification & Audit en la Fase 3
 
-- [Implementación y validación de Alex](observabilidad/alex-fase3.md)
+- [Implementación y validación](observabilidad/alex-fase3.md)
 - [Decisiones registradas](observabilidad/decisiones-alex-fase3.md)
 - [Postmortem local del broker](postmortems/2026-10-23-alex-broker-local.md)
-
 - [Pendientes compartidos de Fase 3](observabilidad/pendientes-compartidos-fase3.md): diferencias con el enunciado y criterios de cierre.

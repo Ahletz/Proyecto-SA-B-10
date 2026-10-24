@@ -1,4 +1,4 @@
-# 17. Guía de demostración para calificación
+# Guía de demostración para calificación
 
 La demostración se hace sobre producción (GKE `prod` y Cloud Run). Accesos:
 - Frontend: URL del servicio Cloud Run `bank-usac-frontend` (la deja `cd-prod.yml` en el resumen del run).

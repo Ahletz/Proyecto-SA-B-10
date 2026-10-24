@@ -1,8 +1,8 @@
 # Contratos de Account y Payment (Fase 3)
 
-Lo que Alex y Nufio pueden esperar de Account y Payment. Todo ya está en la rama `feature/fase3-observabilidad`.
+Lo que el resto del sistema (Notification, Gateway, pruebas de carga y de fallo) puede esperar de Account y Payment.
 
-## 1. Evento `account.anomaly.detected` (para Alex: Notification y Audit)
+## 1. Evento `account.anomaly.detected` (consumido por Notification & Audit)
 
 Lo publica Account en el exchange `bank.events` con routing key `account.anomaly.detected`. Usa el mismo envelope que el resto de los eventos (`eventId`, `eventType`, `version`, `timestamp`, `correlationId`, `payload`).
 
@@ -30,13 +30,13 @@ Lo publica Account en el exchange `bank.events` con routing key `account.anomaly
 }
 ```
 
-**Alex:** bindear una cola de Notification y otra de Audit a ese routing key. Notification avisa al cliente (con `customerId` consulta su correo), Audit lo guarda. Recordar enmascarar el correo en logs.
+**Consumo:** Notification & Audit lo recibe por su binding `account.#`, lo audita como `WARNING` y avisa al cliente con el correo que proyectó desde los eventos de Customer (sin HTTP hacia Customer; si no hay contacto histórico usa el canal operativo configurado). Los correos se enmascaran en logs.
 
-## 2. Endpoint interno de simulación de Payment (para pruebas de carga y fallas)
+## 2. Endpoint de simulación de Payment (para pruebas de carga y fallas)
 
-Cambia en caliente cómo se comporta el procesador externo simulado, sin redeploy. **Es interno: Nufio, no lo expongas en el API Gateway.**
+Cambia en caliente cómo se comporta el procesador externo simulado, sin redeploy. El endpoint de Payment es interno; el API Gateway lo expone solo a ADMIN en `/api/admin/payment-simulation` (reenvía a Payment con `X-Admin-Token` desde el Secret `bank-interbank-secret`) y es la vía que usan los escenarios de fallo.
 
-| Método | Ruta (directo al servicio Payment) | Qué hace |
+| Método | Ruta (directo al servicio Payment; por el Gateway es `/api/admin/payment-simulation`) | Qué hace |
 |---|---|---|
 | GET | `/internal/payment-simulation` | Ajustes vigentes |
 | POST | `/internal/payment-simulation` | Cambia uno o varios campos |
@@ -44,10 +44,10 @@ Cambia en caliente cómo se comporta el procesador externo simulado, sin redeplo
 
 Campos: `failureRate` (0-1), `timeoutRate` (0-1), `timeoutMs` (0-60000), `latencyMs` (0-60000, latencia añadida a toda llamada). `failureRate + timeoutRate` no puede pasar de 1.
 
-Si Payment tiene la variable `ADMIN_TOKEN`, hay que mandar el header `X-Admin-Token`. Los cambios viven en memoria del pod y se pierden al reiniciarlo (con más de una réplica solo afectan al pod que respondió).
+Si Payment tiene la variable `ADMIN_TOKEN`, hay que mandar el header `X-Admin-Token` (el Gateway lo agrega). Los cambios viven en memoria del pod y se pierden al reiniciarlo (con más de una réplica solo afectan al pod que respondió).
 
 ```bash
-# desde otra terminal: kubectl -n <namespace> port-forward svc/payment-service 3005:3005
+# directo al servicio, desde otra terminal: kubectl -n <namespace> port-forward svc/payment-service 3005:3005
 curl -X POST localhost:3005/internal/payment-simulation -H 'Content-Type: application/json' \
   -d '{"failureRate":0.6,"timeoutRate":0.2}'          # escenario: procesador externo degradado
 curl -X POST localhost:3005/internal/payment-simulation -H 'Content-Type: application/json' \

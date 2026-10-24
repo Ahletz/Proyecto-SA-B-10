@@ -1,4 +1,4 @@
-# 12. Aislamiento de red con NetworkPolicy
+# Aislamiento de red con NetworkPolicy
 
 La política `backend-ingress-policy` selecciona los cinco microservicios de dominio:
 - customer-service;
@@ -12,6 +12,8 @@ Su ingress se permite desde pods con label:
 - `app: rabbitmq`.
 
 Esto refuerza la topología prevista: el tráfico HTTP externo entra por Gateway y la interacción asíncrona llega desde RabbitMQ. Frontend no debe hablar directamente con servicios de dominio.
+
+Una segunda política, `notification-alertmanager-ingress`, permite a Notification & Audit recibir en el puerto `8082` únicamente al pod `alertmanager` del namespace `observability` (webhook interno `/internal/alerts/slo`).
 
 ## Verificación
 ```bash

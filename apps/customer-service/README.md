@@ -1,130 +1,56 @@
-# Customer Service - pruebas por curl
+# Customer Service
 
-Estas pruebas asumen que la infraestructura ya está levantada con Docker Compose y que el servicio de Customer Service está corriendo.
+Microservicio (Spring Boot, JPA) responsable de la identidad: registro, activación por correo, login con JWT, perfil y estado KYC. Publica `customer.registered`, `customer.activated`, `customer.updated` y `customer.kyc.status.changed`. Es el dueño de la base `bank_customer`.
 
-## 1) Registrar un cliente
+## Endpoints
 
-```bash
-curl -s -X POST http://localhost:8081/api/customers/register \
-  -H "Content-Type: application/json" \
-  -d '{
-    "email": "user1@example.com",
-    "username": "user1",
-    "password": "Secret123!"
-  }' | jq
-```
+Las rutas públicas del sistema pasan por el API Gateway; aquí se muestran contra el servicio directo (`http://localhost:8081`).
 
-Resultado esperado:
-- HTTP 200
-- JSON con `status`, `customerId` y `activationToken`
+| Método | Ruta | Acceso | Descripción |
+|---|---|---|---|
+| POST | `/api/customers/register` | público | Registra un CLIENT en `PENDING_ACTIVATION` y devuelve `activationToken` |
+| GET | `/api/customers/activate/{token}` | público | Activa la cuenta (`ACTIVE`) |
+| POST | `/api/customers/login` | público | Devuelve el JWT |
+| GET, PUT | `/api/customers/me` | autenticado | Consulta y actualiza el perfil |
+| GET | `/api/customers?kycStatus=` | ADMIN, CASHIER | Lista clientes (sin la foto del documento) |
+| PATCH | `/api/customers/{customerId}/kyc` | ADMIN | Cambia el KYC a `PENDING`, `VERIFIED` o `REJECTED` |
 
-## 2) Activar la cuenta con el token devuelto
+Registro requiere `email`, `password` (mínimo 6), `fullName`, `documentNumber`, `documentPhoto`, `birthDate` (mayor de 18 años) y `address`; `username` es opcional.
 
-```bash
-TOKEN=$(curl -s -X POST http://localhost:8081/api/customers/register \
-  -H "Content-Type: application/json" \
-  -d '{
-    "email": "user2@example.com",
-    "username": "user2",
-    "password": "Secret123!"
-  }' | jq -r '.activationToken')
-
-curl -i -X POST "http://localhost:8081/api/customers/activate/$TOKEN"
-```
-
-Resultado esperado:
-- HTTP 200
-- la cuenta queda en estado `ACTIVE`
-
-## 3) Login para obtener el JWT
-
-```bash
-curl -s -X POST http://localhost:8081/api/customers/login \
-  -H "Content-Type: application/json" \
-  -d '{
-    "username": "user1",
-    "password": "Secret123!"
-  }' | jq
-```
-
-Resultado esperado:
-- HTTP 200
-- JSON con `token`
-
-Guardar el token para la siguiente prueba:
-
-```bash
-JWT=$(curl -s -X POST http://localhost:8081/api/customers/login \
-  -H "Content-Type: application/json" \
-  -d '{
-    "username": "user1",
-    "password": "Secret123!"
-  }' | jq -r '.token')
-```
-
-## 4) Actualizar perfil autenticado
-
-```bash
-curl -i -X PUT http://localhost:8081/api/customers/me \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $JWT" \
-  -d '{
-    "email": "user1.updated@example.com"
-  }'
-```
-
-Resultado esperado:
-- HTTP 200
-- JSON con `status: ok`, `customerId` y `updatedFields`
-
-## 5) Validaciones negativas recomendadas
-
-### Login con contraseña incorrecta
-
-```bash
-curl -i -X POST http://localhost:8081/api/customers/login \
-  -H "Content-Type: application/json" \
-  -d '{
-    "username": "user1",
-    "password": "wrong-pass"
-  }'
-```
-
-Debe responder con HTTP 401.
-
-### Activación con token inválido
-
-```bash
-curl -i -X POST http://localhost:8081/api/customers/activate/invalid-token
-```
-
-Debe responder con HTTP 400.
-
-## 6) Secuencia válida recomendada para pruebas manuales
+## Pruebas manuales por curl
 
 ```bash
 # 1) registrar
 curl -s -X POST http://localhost:8081/api/customers/register \
   -H "Content-Type: application/json" \
-  -d '{"email":"demo@example.com","username":"demo","password":"Secret123!"}' | jq
+  -d '{"email":"demo@example.com","username":"demo","password":"Secret123!","fullName":"Cliente Demo","documentNumber":"1234567890101","documentPhoto":"foto","birthDate":"1990-01-01","address":"Ciudad de Guatemala"}' | jq
 
-# 2) copiar activationToken desde la respuesta y activar
-curl -i -X POST http://localhost:8081/api/customers/activate/<activationToken>
+# 2) activar con el activationToken devuelto (también llega por correo a MailHog)
+curl -i http://localhost:8081/api/customers/activate/<activationToken>
 
 # 3) login
-curl -s -X POST http://localhost:8081/api/customers/login \
-  -H "Content-Type: application/json" \
-  -d '{"username":"demo","password":"Secret123!"}' | jq
-
-# 4) actualizar perfil
 JWT=$(curl -s -X POST http://localhost:8081/api/customers/login \
   -H "Content-Type: application/json" \
   -d '{"username":"demo","password":"Secret123!"}' | jq -r '.token')
 
+# 4) perfil
 curl -i -X PUT http://localhost:8081/api/customers/me \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $JWT" \
-  -d '{"username":"demo2"}'
+  -H "Content-Type: application/json" -H "Authorization: Bearer $JWT" \
+  -d '{"address":"Nueva dirección 123"}'
 ```
 
-> Importante: la cuenta debe estar activa antes de poder hacer login. El registro devuelve un `activationToken` temporal y el flujo correcto es: registrar → activar → login → actualizar perfil autenticado.
+Validaciones esperadas: login con contraseña incorrecta o cuenta sin activar -> `401`; token de activación inválido -> `400`. La cuenta debe estar activa antes de iniciar sesión.
+
+## Eventos y KYC
+
+Un cambio real de KYC publica `customer.kyc.status.changed` (repetir el mismo estado no publica nada) y Transaction lo proyecta en su base. Solo un cliente `VERIFIED` puede transferir. Ver [contratos de eventos](../../docs/02-eventos/01-contratos-eventos.md).
+
+## Observabilidad
+
+OpenTelemetry (SDK en la aplicación) con spans HTTP, de publicación y de negocio, `traceparent` en los headers AMQP y logs JSON con redacción de datos sensibles. Persiste el `correlationId` y el contexto de traza del registro (`lifecycle_*`) para enlazar la verificación KYC posterior. Métricas: `bank_customer_kyc_current`, `bank_customer_kyc_total`, `bank_customer_kyc_verification_duration_seconds`, `bank_operations_total` y las HTTP. Detalle en [Implementación de Customer y Notification](../../docs/observabilidad/alex-fase3.md). En local `OTEL_SDK_DISABLED=true` (ver `.env.example`).
+
+## Pruebas
+
+```bash
+mvn -B clean test
+```

@@ -1,114 +1,58 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# Transaction Service
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+Microservicio (NestJS + TypeORM) dueño del ciclo de vida de cada transferencia y de la Saga por coreografía: crea la transacción, valida el KYC con una proyección local y cambia de estado según los eventos de Account y Payment. También lleva el estado de los depósitos a otro banco (`interbankState`). No ejecuta lógica de saldos ni de pagos.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+## Configuración
 
-## Description
+| Variable | Valor local (`.env.example`) |
+|---|---|
+| `PORT` | 3003 |
+| `DB_HOST` / `DB_PORT` / `DB_DATABASE` | `localhost` / 5434 / `bank_transaction` (PostgreSQL) |
+| `RABBITMQ_URL` | `amqp://rabbit_user:rabbit_password@localhost:5672` |
+| `RABBITMQ_EXCHANGE` / `RABBITMQ_QUEUE` | `bank.events` / `transaction-service.events` |
+| `RABBITMQ_RETRY_EXCHANGE` / `RABBITMQ_DLX` | `bank.events.retry` / `bank.events.dlx` |
+| `RABBITMQ_PREFETCH` / `RABBITMQ_MAX_RETRIES` / `RABBITMQ_RETRY_DELAY_MS` | 10 / 3 / 5000 |
+| `DB_POOL_MAX` | Conexiones por réplica a la base (4 en Kubernetes) |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | Por defecto, el OTel Collector del namespace `observability` |
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+## Endpoints REST
 
-## Project setup
+| Método | Ruta | Descripción |
+|---|---|---|
+| GET | `/api/transactions?accountId=` | Historial de una cuenta (origen o destino) con filtros `from`, `to`, `status`, `page` y `size` |
+| GET | `/api/transactions/correlation/:correlationId` | Estado de una transferencia por su `correlationId` (lo usa el Gateway para el seguimiento) |
+| GET | `/api/transactions/:transactionId` | Consulta una transacción |
+| GET | `/health` | Estado del servicio |
 
-```bash
-$ npm install
-```
+## Eventos
 
-## Compile and run the project
+**Publica:** `transaction.created`, `transaction.completed`, `transaction.failed`, `transaction.compensated`, `transaction.status.changed` e `interbank.transfer.requested`. Los `eventId` son deterministas y cada evento lleva `causationId`.
 
-```bash
-# development
-$ npm run start
+**Consume:** `transaction.transfer.requested`, `transaction.interbank.requested`, `account.funds.reserved`, `account.funds.rejected`, `payment.rejected`, `account.transfer.completed`, `account.transfer.failed`, `account.funds.released`, `customer.kyc.status.changed` y los eventos `account.interbank.*` e `interbank.transfer.*` del depósito. Lista completa en la [topología RabbitMQ](../../docs/02-eventos/02-topologia-rabbitmq.md).
 
-# watch mode
-$ npm run start:dev
+## Reglas de negocio
 
-# production mode
-$ npm run start:prod
-```
+- Estados internos: `PENDING`, `PROCESSING`, `COMPLETED`, `FAILED`, `COMPENSATING` y `COMPENSATED`. Estado público: `PENDING`, `APPROVED` o `FAILED` (ver la [Saga](../../docs/03-saga/01-saga-transferencia.md)).
+- Solo un cliente con KYC `VERIFIED` puede transferir; sin registro en la proyección `customer_kyc_status` cuenta como `PENDING` (`KYC_NOT_VERIFIED`).
+- Depósito interbancario: `interbankState` pasa por `PENDING`, `SENT`, `TIMEOUT`, `ACCEPTED`, `REJECTED` o `REVERSED`; un estado final nunca se sobrescribe con uno anterior ([Saga interbancaria](../../docs/03-saga/02-deposito-interbancario.md)).
+- Idempotencia por `eventId` (`processed_events`); un evento fuera de orden falla y se reintenta desde la cola `.retry` hasta 3 veces, luego va a la DLQ.
 
-## Run tests
+## Observabilidad
+OpenTelemetry (`src/tracing.ts`) hacia el Collector y logs JSON con `traceId` y `correlationId`. Abre los spans `transaction.saga.start` y `transaction.saga.compensate` y mide `bank_transfer_duration_seconds{type,outcome}` y `bank_operations_total` ([catálogo](../../docs/observabilidad/catalogo-metricas.md)).
+
+## Cómo correr localmente
 
 ```bash
-# unit tests
-$ npm run test
-
-# e2e tests
-$ npm run test:e2e
-
-# test coverage
-$ npm run test:cov
+npm ci
+npm run start:dev
 ```
 
-## Deployment
+Requiere PostgreSQL y RabbitMQ (ver `infrastructure/docker-compose.yml` o `scripts/project/start-local.sh`).
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
-
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
+## Pruebas
 
 ```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
+npm test
 ```
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
-
-## Observability
-
-In production applications, observability is essential for understanding how your system behaves, detecting issues early, and maintaining reliable performance.
-
-[NestJS Observe](https://observe.nestjs.com) automatically instruments your NestJS application, giving you deep visibility into your system with minimal setup:
-
-- **Distributed tracing:** Follow requests across services and understand how they flow through your system.
-- **Waterfall analysis:** Visualize request execution and identify slow operations, bottlenecks, and unexpected delays.
-- **Performance analysis:** Analyze application performance in real time and quickly pinpoint areas that need optimization.
-- **Metrics:** Track key application and infrastructure metrics to understand system health and performance trends.
-- **Logging:** Centralize and correlate logs with traces and other telemetry to make debugging easier.
-- **Error tracking:** Detect errors quickly and investigate their root causes with the surrounding context.
-- **SLA monitoring:** Track service-level objectives and identify when your application is approaching or exceeding defined thresholds.
-- **Alarms and alerts:** Set up alerts for critical errors, performance degradation, SLA violations, and other anomalies so your team can react quickly.
-
-## Resources
-
-Check out a few resources that may come in handy when working with NestJS:
-
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Auto-instrument your application with [NestJS Observer](https://observer.nestjs.com). Distributed tracing, metrics, and logging made easy. Error tracking and performance monitoring for your NestJS applications.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
-
-## Support
-
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
-
-## Stay in touch
-
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
-
-## License
-
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+Pruebas unitarias con Vitest: consumidor de la Saga, proyección KYC, historial, publicación de eventos y estados. Detalle en [`docs/testing/README.md`](../../docs/testing/README.md).

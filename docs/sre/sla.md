@@ -2,6 +2,8 @@
 
 ## Objetivo
 
+Los SLO vigentes están en [slo.md](slo.md). Cada umbral de SLA es más laxo que su SLO, que es lo que corresponde: primero se agota el presupuesto de error y solo después se incumple el acuerdo.
+
 Este documento define los acuerdos de nivel de servicio (SLA) y las consecuencias asociadas al incumplimiento de los SLO de Account Service y Payment Service.
 
 ## 1. Disponibilidad del servicio
@@ -18,11 +20,11 @@ Este documento define los acuerdos de nivel de servicio (SLA) y las consecuencia
 
 ## 4. Consumo de eventos sin pérdida (idempotencia)
 
-**SLA:** Si el porcentaje de eventos procesados exactamente una vez cae por debajo de 99.999% en un mes, se documenta como incidente crítico, dado que compromete la integridad de los saldos.
+**SLA:** Si el porcentaje de eventos procesados exactamente una vez cae por debajo de 99.9% en un mes, se documenta como incidente crítico, dado que compromete la integridad de los saldos.
 
 ## Notas generales
 
-- Las métricas de disponibilidad y latencia se pueden obtener a partir de los logs de Spring Boot/NestJS y las consultas a la tabla `processed_events`.
+- Las métricas de disponibilidad, éxito, latencia e idempotencia salen de Prometheus (ver [SLI](sli.md#cómo-se-miden-en-la-fase-3)); la tabla `processed_events` sirve para verificar casos puntuales.
 - El SLO de idempotencia (99.95%) es el más estricto de los cuatro porque un evento duplicado en un sistema bancario puede causar una transferencia o un pago duplicado — pero se define con margen de error medible, no como un absoluto del 100%, siguiendo práctica estándar de SRE.
 - Los rechazos de negocio (fondos insuficientes, saldo mínimo no alcanzado, fallo simulado del procesador de pago externo) no cuentan contra estos SLO/SLA, ya que representan comportamiento correcto del sistema, no una falla técnica.
 - Estos indicadores aplican a Account Service y Payment Service; los demás microservicios definen los suyos según su propio dominio.
